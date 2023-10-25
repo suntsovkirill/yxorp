@@ -1,0 +1,38 @@
+{
+  "name": "yxorp",
+  "version": "0.1.0",
+  "description": "Yxorp is a reverse proxy for rewriting or mocking API data.",
+  "main": "src/index.ts",
+  "bin": {
+    "yxorp": "./bin/yxorp.js"
+  },
+  "scripts": {
+    "start": "nodemon src/index.ts"
+  },
+  "author": "Kirill Suntsov",
+  "license": "MIT",
+  "dependencies": {
+    "http-encoding": "^1.5.1",
+    "http-proxy": "^1.18.1",
+    "mime": "^3.0.0",
+    "nodemon": "^3.0.1",
+    "path-to-regexp": "^6.2.1",
+    "qs": "^6.11.2",
+    "reflect-metadata": "^0.1.13",
+    "typedi": "^0.10.0",
+    "yargs": "^17.7.2"
+  },
+  "devDependencies": {
+    "@types/http-proxy": "^1.17.11",
+    "@types/mime": "^3.0.1",
+    "@types/node": "^20.4.9",
+    "@types/qs": "^6.9.8",
+    "ts-node": "^10.9.1",
+    "tslib": "^2.6.1",
+    "typescript": "^5.1.6",
+    "winston": "^3.10.0"
+  },
+  "engines": {
+    "node": ">= 12"
+  }
+}
