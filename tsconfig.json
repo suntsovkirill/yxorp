@@ -4,7 +4,7 @@
   "ts-node": {
     // It is faster to skip typechecking.
     // Remove if you want ts-node to do typechecking.
-    // "transpileOnly": true,
+    "transpileOnly": true,
     "files": true,
     "compilerOptions": {
       // compilerOptions specified here will override those declared below,
