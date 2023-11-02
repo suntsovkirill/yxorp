@@ -19,6 +19,7 @@
     "path-to-regexp": "^6.2.1",
     "qs": "^6.11.2",
     "reflect-metadata": "^0.1.13",
+    "ts-node": "^10.9.1",
     "typedi": "^0.10.0",
     "yargs": "^17.7.2"
   },
@@ -27,7 +28,6 @@
     "@types/mime": "^3.0.1",
     "@types/node": "^20.4.9",
     "@types/qs": "^6.9.8",
-    "ts-node": "^10.9.1",
     "tslib": "^2.6.1",
     "typescript": "^5.1.6",
     "winston": "^3.10.0"
