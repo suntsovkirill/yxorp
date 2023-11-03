@@ -14,7 +14,7 @@ Simple yxopr.json example:
 {
   "#": "The site that will be proxied"
   "target": "http://example.com/",
-  "port": 3002,
+  "proxyPort": 3002,
   "#": "Makes static path with files in directory",
   "staticRules": [
     {
