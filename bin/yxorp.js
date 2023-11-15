@@ -11,7 +11,7 @@ nodemonDefaults.execMap.ts = pathToTsNode;
 
 nodemon({
   script: filepath,
-  watch: ['yxopr.json']
+  watch: ['yxorp.json']
 });
 
 nodemon.on('quit', function () {

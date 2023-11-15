@@ -12,10 +12,10 @@ import { ProxyConfigToken } from './services/config.service';
 let config: ConfigFile;
 
 try {
-  config = JSON.parse(fs.readFileSync('./yxopr.json').toString()) as ConfigFile;
+  config = JSON.parse(fs.readFileSync('./yxorp.json').toString()) as ConfigFile;
 } catch(e) {
   console.error(e);
-  throw 'Can\'t read yxopr.json'
+  throw 'Can\'t read yxorp.json'
 }
 
 globalThis.require = require;
