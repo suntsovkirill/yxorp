@@ -1,12 +1,7 @@
-import { Service } from 'typedi';
 import { Config } from '../config.service';
 import { match } from 'path-to-regexp';
 import { MockRule } from '../../types/yxorp-config';
 
-
-@Service({
-  global: true
-})
 export class MockRulesMatcher {
   constructor(
     private config: Config
@@ -44,5 +39,4 @@ export class MockRulesMatcher {
       return matchResult.params;
     }
   }
-
 }

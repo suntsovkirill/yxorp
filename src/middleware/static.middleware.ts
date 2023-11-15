@@ -1,4 +1,3 @@
-import { Service } from 'typedi';
 import { ServerResponse, IncomingMessage } from 'http';
 import path from 'path';
 import fs from 'fs/promises';
@@ -8,10 +7,6 @@ import { Config } from '../services/config.service';
 import { Middleware } from '../services/pipeline.service';
 import { LoggerService } from '../services/logger.service';
 
-
-@Service({
-  global: true
-})
 export class StaticMiddleware implements Middleware<[req: IncomingMessage, res: ServerResponse]> {
   constructor(
     private config: Config,
@@ -83,7 +78,7 @@ export class StaticMiddleware implements Middleware<[req: IncomingMessage, res: 
       res.setHeader('content-length', file.length);
       res.end(file);
 
-      this.logger.info(`[STATIC] ${req.url}`);
+      this.logger.info(`static        ${res.statusCode} ${req.method} ${req.url}`);
     } catch (e) {
       this.logger.error(e);
       next();
@@ -109,5 +104,4 @@ export class StaticMiddleware implements Middleware<[req: IncomingMessage, res: 
 
     return files;
   }
-
 }

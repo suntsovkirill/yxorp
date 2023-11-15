@@ -1,13 +1,12 @@
-import { ServerOptions } from 'http-proxy';
-
 export interface YxorpConfig extends ConfigFile {
-  proxyOptions: ServerOptions;
+  proxyOptions: Record<string, any>;
 }
 
 export interface ConfigFile {
   target: string;
   proxyPort: string | number;
   scripts?: string[];
+  proxyHeaders?: Record<string, string>;
   remoteRules?: RemoteRule[];
   staticRules?: StaticRule[];
   mockRules?: MockRule[];
