@@ -4,7 +4,7 @@
   "description": "Yxorp is a reverse proxy for rewriting or mocking API data.",
   "main": "src/index.ts",
   "bin": {
-    "yxorp": "./bin/yxorp.js"
+    "yxorp": "bin/yxorp.js"
   },
   "scripts": {
     "start": "nodemon src/index.ts"
