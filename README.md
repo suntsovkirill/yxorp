@@ -3,13 +3,13 @@ This is a simple CLI reverse proxy utility for rewriting or mocking API data. It
 
 ## Installation
 ```
-npm i -g yxopr
+npm i -g yxorp
 ```
 ## Usage
 Just run yxopr in folder which contains yxopr.json
 
 ## Config
-Simple yxopr.json example:
+Simple yxorp.json example:
 ```json
 {
   "#": "The site that will be proxied"
