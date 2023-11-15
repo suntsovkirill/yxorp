@@ -1,6 +1,6 @@
 {
   "name": "yxorp",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Yxorp is a reverse proxy for rewriting or mocking API data.",
   "main": "src/index.ts",
   "bin": {
