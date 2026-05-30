@@ -243,6 +243,10 @@ dist/
 .yxorp/
 yxorp.json
 
+# IDE
+.idea/
+.vscode/
+
 # Claude Code
 .claude/
 
