@@ -1,38 +1,45 @@
 {
   "name": "yxorp",
-  "version": "0.1.5",
-  "description": "Yxorp is a reverse proxy for rewriting or mocking API data.",
-  "main": "src/index.ts",
+  "version": "0.2.0",
+  "description": "A local reverse proxy for rewriting, mocking, and debugging API responses.",
+  "files": [
+    "dist/",
+    "bin/",
+    "LICENSE",
+    "README.md"
+  ],
+  "main": "dist/index.js",
   "bin": {
     "yxorp": "bin/yxorp.js"
   },
   "scripts": {
-    "start": "nodemon src/index.ts"
+    "start": "nodemon src/index.ts",
+    "build": "tsc -p tsconfig.build.json",
+    "prepublishOnly": "npm run build",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "author": "Kirill Suntsov",
   "license": "MIT",
   "dependencies": {
-    "http-encoding": "^1.5.1",
-    "http-proxy": "^1.18.1",
+    "http-encoding": "^2.2.0",
+    "httpxy": "^0.5.3",
     "mime": "^3.0.0",
-    "nodemon": "^3.0.1",
-    "path-to-regexp": "^6.2.1",
-    "qs": "^6.11.2",
-    "reflect-metadata": "^0.1.13",
-    "ts-node": "^10.9.1",
-    "tslib": "^2.6.2",
-    "typedi": "^0.10.0",
-    "typescript": "^5.2.2",
-    "winston": "^3.11.0",
-    "yargs": "^17.7.2"
+    "path-to-regexp": "^8.4.2",
+    "qs": "^6.15.2",
+    "tslib": "^2.8.1",
+    "winston": "^3.19.0"
   },
   "devDependencies": {
-    "@types/http-proxy": "^1.17.11",
-    "@types/mime": "^3.0.1",
-    "@types/node": "^20.4.9",
-    "@types/qs": "^6.9.8"
+    "@types/mime": "^3.0.4",
+    "@types/node": "^20.19.41",
+    "@types/qs": "^6.15.1",
+    "nodemon": "^3.0.1",
+    "ts-node": "^10.9.1",
+    "typescript": "^5.2.2",
+    "vitest": "^4.1.7"
   },
   "engines": {
-    "node": ">= 12"
+    "node": ">= 18"
   }
 }

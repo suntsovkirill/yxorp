@@ -1,23 +1,11 @@
-import { Container, Service } from 'typedi';
-
-
 export interface Middleware<T extends any[]> {
-  use(...args: [...T, () => void]): void;
-  [k: string]: any;
+  use(...args: [...T, () => void]): void | Promise<void>;
 }
 
-export interface MiddlewareCtor<T extends any[]> {
-  new(...args: any): Middleware<T>;
-}
-export type Middlewares<T extends any[]> = MiddlewareCtor<T>[];
-
-@Service({
-  transient: true,
-})
 export class Pipeline<T extends any[]> {
-  private stack: Middlewares<T> = [];
+  private stack: Middleware<T>[] = [];
 
-  public use(...middlewares: Middlewares<T>) {
+  public use(...middlewares: Middleware<T>[]) {
     this.stack.push(...middlewares);
   }
 
@@ -31,7 +19,11 @@ export class Pipeline<T extends any[]> {
 
       prevIndex = index;
 
-      const middleware = Container.get(this.stack[index]);
+      const middleware = this.stack[index];
+
+      if (!middleware) {
+        return;
+      }
 
       await middleware.use(...args, () => {
         return runner(index + 1);
@@ -40,5 +32,4 @@ export class Pipeline<T extends any[]> {
 
     await runner(0);
   }
-
 }

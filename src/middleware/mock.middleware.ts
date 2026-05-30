@@ -1,4 +1,3 @@
-import { Service } from 'typedi';
 import { ServerResponse, IncomingMessage } from 'http';
 import mime from 'mime';
 import fs from 'fs/promises';
@@ -6,9 +5,6 @@ import path from 'path';
 import { Middleware } from '../services/pipeline.service';
 import { LoggerService } from '../services/logger.service';
 
-@Service({
-  global: true
-})
 export class MockMiddleware implements Middleware<[req: IncomingMessage, res: ServerResponse]> {
   constructor(
     private logger: LoggerService,
@@ -25,12 +21,19 @@ export class MockMiddleware implements Middleware<[req: IncomingMessage, res: Se
       }
 
       if ('script' in mockRule) {
-        const file = await fs.readFile(path.resolve(mockRule.script));
+        const fullPath = path.resolve(mockRule.script);
+        delete require.cache[require.resolve(fullPath)];
+        const handler = require(fullPath);
 
-        const func = new Function('req, res', file.toString());
-        await func(req, res);
+        if (typeof handler === 'function') {
+          await handler(req, res);
 
-        this.logger.info(`[MOCK BY SCRIPT] ${res.statusCode || 200} ${req.url}`);
+          if (!res.headersSent) {
+            res.setHeader('content-type', 'application/json');
+          }
+        }
+
+        this.logger.info(`mock         ${res.statusCode || 200} ${req.method} ${req.url}`);
         return;
       }
 
@@ -47,7 +50,7 @@ export class MockMiddleware implements Middleware<[req: IncomingMessage, res: Se
         res.setHeader('content-length', file.length);
         res.end(file);
 
-        this.logger.info(`[MOCK BY FILE] ${res.statusCode} ${req.url}`);
+        this.logger.info(`mock         ${res.statusCode} ${req.method} ${req.url}`);
         return;
       }
 
@@ -57,5 +60,4 @@ export class MockMiddleware implements Middleware<[req: IncomingMessage, res: Se
       next();
     }
   }
-
 }

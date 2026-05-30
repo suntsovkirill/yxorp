@@ -1,12 +1,7 @@
-import { Service } from 'typedi';
 import { Config } from '../config.service';
 import { match } from 'path-to-regexp';
 import { RewriteRule } from '../../types/yxorp-config';
 
-
-@Service({
-  global: true
-})
 export class RewriteRulesMatcher {
   constructor(
     private config: Config
@@ -44,5 +39,4 @@ export class RewriteRulesMatcher {
       return matchResult.params;
     }
   }
-
 }

@@ -236,5 +236,14 @@ $RECYCLE.BIN/
 
 # End of https://www.toptal.com/developers/gitignore/api/visualstudiocode,windows,linux,macos,node
 
-config.json
+# Build output
+dist/
+
+# Project config
+.yxorp/
+yxorp.json
+
+# Claude Code
+.claude/
+
 mocks/

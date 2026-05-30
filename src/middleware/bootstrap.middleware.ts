@@ -1,16 +1,11 @@
 import { IncomingMessage } from 'http';
-import { Service } from 'typedi';
 import qs from 'qs';
 import { Middleware } from '../services/pipeline.service';
 import { RewriteRulesMatcher } from '../services/rules-matchers/rewrite-rules-matcher.service';
 import { MockRulesMatcher } from '../services/rules-matchers/mock-rules-matcher.service';
 import { LoggerService } from '../services/logger.service';
 
-
-@Service({
-  global: true
-})
-export class BootstrapMiddleware<T extends any[]> implements Middleware<T> {
+export class BootstrapMiddleware implements Middleware<[req: IncomingMessage, res: any]> {
   constructor(
     private rewriteRulesMatcher: RewriteRulesMatcher,
     private mockRulesMatcher: MockRulesMatcher,
@@ -18,10 +13,7 @@ export class BootstrapMiddleware<T extends any[]> implements Middleware<T> {
   ) {
   }
 
-  public use(...args: [...T, () => void]): void {
-    const req: IncomingMessage = args[0] as IncomingMessage;
-    const next: () => void = args[args.length - 1];
-
+  public use(req: IncomingMessage, _res: any, next: () => void): void {
     try {
       this.setRewriteRule(req);
       this.setMockRule(req);
@@ -82,6 +74,4 @@ export class BootstrapMiddleware<T extends any[]> implements Middleware<T> {
 
     req.query = query;
   }
-
 }
-

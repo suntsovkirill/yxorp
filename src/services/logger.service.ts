@@ -1,10 +1,5 @@
-import { Service } from 'typedi';
 import { createLogger, format, transports } from 'winston';
 
-
-@Service({
-  global: true
-})
 export class LoggerService {
   private logger = createLogger({
     format: format.combine(

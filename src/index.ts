@@ -1,48 +1,71 @@
-import 'reflect-metadata';
-
 import fs from 'fs';
 import path from 'path';
-import { Container } from 'typedi';
-import { ServerOptions } from 'http-proxy';
-import { YxorpServer } from './services/yxorp-server.service';
+import { Config } from './services/config.service';
+import { LoggerService } from './services/logger.service';
+import { RemoteRulesMatcher } from './services/rules-matchers/remote-rules-matcher.service';
+import { RewriteRulesMatcher } from './services/rules-matchers/rewrite-rules-matcher.service';
+import { MockRulesMatcher } from './services/rules-matchers/mock-rules-matcher.service';
+import { createServer } from './services/yxorp-server.service';
 import { ConfigFile } from './types/yxorp-config';
-import { ProxyConfigToken } from './services/config.service';
+import { resolveConfig } from './services/config-resolver';
 
-
+// --- Config resolution ---
+let configDir: string;
 let config: ConfigFile;
 
 try {
-  config = JSON.parse(fs.readFileSync('./yxorp.json').toString()) as ConfigFile;
-} catch(e) {
-  console.error(e);
-  throw 'Can\'t read yxorp.json'
+  const resolved = resolveConfig(process.cwd(), process.argv);
+  configDir = resolved.configDir;
+  config = resolved.config;
+} catch(e: any) {
+  console.error(e.message || e);
+  process.exit(1);
 }
 
-globalThis.require = require;
+// Change CWD to config directory so relative paths in config work correctly
+if (configDir !== process.cwd()) {
+  process.chdir(configDir);
+}
 
-const proxyOptions: ServerOptions = {
+const proxyOptions: Record<string, any> = {
   target: config.target,
   changeOrigin: true,
   followRedirects: true,
   secure: false,
-  localAddress: '0.0.0.0',
   ws: true,
   selfHandleResponse: true,
 };
 
+if (config.proxyHeaders) {
+  proxyOptions.headers = config.proxyHeaders;
+}
+
 const proxyConfig = {
   ...config,
   proxyOptions,
-}
+};
 
 config?.scripts?.forEach(script => {
-  require(path.join(process.cwd(), script));
+  require(path.resolve(script));
 });
 
-Container.set(ProxyConfigToken, proxyConfig);
+// Manual composition — no DI container
+const logger = new LoggerService();
+const appConfig = new Config();
+appConfig.set(proxyConfig);
 
-const server = Container.get(YxorpServer);
+const mockRulesMatcher = new MockRulesMatcher(appConfig);
+const rewriteRulesMatcher = new RewriteRulesMatcher(appConfig);
+const remoteRulesMatcher = new RemoteRulesMatcher(appConfig);
 
-server.listen(config.proxyPort, () => {
+const { listen } = createServer(
+  appConfig,
+  logger,
+  rewriteRulesMatcher,
+  mockRulesMatcher,
+  remoteRulesMatcher,
+);
+
+listen(config.proxyPort, () => {
   console.log(`Yxorp server started successfully on http://localhost:${config.proxyPort}`);
 });

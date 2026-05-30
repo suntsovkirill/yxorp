@@ -1,12 +1,7 @@
-import { Service } from 'typedi';
 import { Config } from '../config.service';
 import { match, compile } from 'path-to-regexp';
 import { RemoteRule } from '../../types/yxorp-config';
 
-
-@Service({
-  global: true
-})
 export class RemoteRulesMatcher {
   constructor(
     private config: Config
@@ -41,9 +36,25 @@ export class RemoteRulesMatcher {
     })(url);
 
     if (matchResult) {
-      const toPath = compile(remoteRule.target, { validate: false });
-      return toPath(matchResult.params);
+      const params = matchResult.params as Record<string, string>;
+
+      // remoteRule.target may be a full URL (http://host:port/:param/path)
+      // Parse it and only compile the path portion
+      let baseUrl: string;
+      let pathPattern: string;
+
+      try {
+        const urlObj = new URL(remoteRule.target);
+        baseUrl = urlObj.origin;
+        pathPattern = urlObj.pathname;
+      } catch {
+        // Not a valid URL — treat as a path pattern
+        const toPath = compile(remoteRule.target);
+        return toPath(matchResult.params);
+      }
+
+      const toPath = compile(pathPattern);
+      return baseUrl + toPath(params);
     }
   }
-
 }
