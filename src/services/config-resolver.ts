@@ -4,6 +4,7 @@ import { ConfigFile } from '../types/yxorp-config';
 
 export interface ResolvedConfig {
   configDir: string;
+  configPath: string;
   config: ConfigFile;
 }
 
@@ -23,6 +24,7 @@ export function resolveConfig(cwd: string, argv: string[]): ResolvedConfig {
     }
     return {
       configDir: path.dirname(resolved),
+      configPath: resolved,
       config: JSON.parse(fs.readFileSync(resolved, 'utf-8')) as ConfigFile,
     };
   }
@@ -32,6 +34,7 @@ export function resolveConfig(cwd: string, argv: string[]): ResolvedConfig {
   if (fs.existsSync(rootConfig)) {
     return {
       configDir: cwd,
+      configPath: rootConfig,
       config: JSON.parse(fs.readFileSync(rootConfig, 'utf-8')) as ConfigFile,
     };
   }
@@ -41,6 +44,7 @@ export function resolveConfig(cwd: string, argv: string[]): ResolvedConfig {
   if (fs.existsSync(dotConfig)) {
     return {
       configDir: dotDir,
+      configPath: dotConfig,
       config: JSON.parse(fs.readFileSync(dotConfig, 'utf-8')) as ConfigFile,
     };
   }
