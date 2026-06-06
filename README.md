@@ -341,7 +341,15 @@ Here's a complete config showing all features in action:
 
 ---
 
-## Script Hot-Reload
+## Hot-Reload
+
+### Config
+
+Yxorp watches its config file at runtime. **Save the file — changes take effect on the next request.** No restart needed.
+
+This works for all config fields: mock rules, rewrite rules, remote rules, static rules, and headers. The proxy server keeps running and the new config is applied immediately.
+
+### Scripts
 
 Mock and rewrite scripts are reloaded on every request — **just save the file and the next request uses the new code**. No need to restart Yxorp.
 
