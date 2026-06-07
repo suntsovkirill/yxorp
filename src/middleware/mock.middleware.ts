@@ -4,6 +4,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import { Middleware } from '../services/pipeline.service';
 import { LoggerService } from '../services/logger.service';
+import { elapsedMs } from '../utils/request-timing';
 
 export class MockMiddleware implements Middleware<[req: IncomingMessage, res: ServerResponse]> {
   constructor(
@@ -33,7 +34,7 @@ export class MockMiddleware implements Middleware<[req: IncomingMessage, res: Se
           }
         }
 
-        this.logger.info(`mock         ${res.statusCode || 200} ${req.method} ${req.url}`);
+        this.logger.info(`mock         ${res.statusCode || 200} ${req.method} ${req.url} ${elapsedMs(req)}ms`);
         return;
       }
 
@@ -50,7 +51,7 @@ export class MockMiddleware implements Middleware<[req: IncomingMessage, res: Se
         res.setHeader('content-length', file.length);
         res.end(file);
 
-        this.logger.info(`mock         ${res.statusCode} ${req.method} ${req.url}`);
+        this.logger.info(`mock         ${res.statusCode} ${req.method} ${req.url} ${elapsedMs(req)}ms`);
         return;
       }
 

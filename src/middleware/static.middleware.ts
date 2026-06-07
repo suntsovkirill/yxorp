@@ -6,6 +6,7 @@ import { Dirent } from 'fs';
 import { Config } from '../services/config.service';
 import { Middleware } from '../services/pipeline.service';
 import { LoggerService } from '../services/logger.service';
+import { elapsedMs } from '../utils/request-timing';
 
 export class StaticMiddleware implements Middleware<[req: IncomingMessage, res: ServerResponse]> {
   constructor(
@@ -20,11 +21,6 @@ export class StaticMiddleware implements Middleware<[req: IncomingMessage, res: 
 
       const url = new URL(req.url || '', 'http://fake.com');
       const urlPath = url.pathname;
-
-      if (!staticRules) {
-        next();
-        return;
-      }
 
       const currentStaticRule = staticRules.filter((staticRule) => {
         return urlPath.startsWith(staticRule.path);
@@ -78,7 +74,7 @@ export class StaticMiddleware implements Middleware<[req: IncomingMessage, res: 
       res.setHeader('content-length', file.length);
       res.end(file);
 
-      this.logger.info(`static        ${res.statusCode} ${req.method} ${req.url}`);
+      this.logger.info(`static        ${res.statusCode} ${req.method} ${req.url} ${elapsedMs(req)}ms`);
     } catch (e) {
       this.logger.error(e);
       next();

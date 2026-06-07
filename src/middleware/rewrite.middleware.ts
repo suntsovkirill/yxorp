@@ -4,6 +4,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import { Middleware } from '../services/pipeline.service';
 import { LoggerService } from '../services/logger.service';
+import { elapsedMs } from '../utils/request-timing';
 
 export class RewriteMiddleware implements Middleware<[proxyRes: IncomingMessage, req: IncomingMessage, res: ServerResponse]> {
   constructor(
@@ -34,7 +35,7 @@ export class RewriteMiddleware implements Middleware<[proxyRes: IncomingMessage,
           proxyRes.rawBody = await encodeBuffer(rewritedResponse, encoding);
         }
 
-        this.logger.info(`rewrite       ${proxyRes.statusCode} ${req.method} ${req.url}`);
+        this.logger.info(`rewrite       ${proxyRes.statusCode} ${req.method} ${req.url} ${elapsedMs(req)}ms`);
 
         next();
         return;
@@ -47,7 +48,7 @@ export class RewriteMiddleware implements Middleware<[proxyRes: IncomingMessage,
           proxyRes.statusCode = rewriteRule.statusCode;
         }
 
-        this.logger.info(`rewrite       ${proxyRes.statusCode} ${req.method} ${req.url}`);
+        this.logger.info(`rewrite       ${proxyRes.statusCode} ${req.method} ${req.url} ${elapsedMs(req)}ms`);
 
         next();
         return;

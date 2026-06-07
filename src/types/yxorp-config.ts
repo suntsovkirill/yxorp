@@ -5,7 +5,6 @@ export interface YxorpConfig extends ConfigFile {
 export interface ConfigFile {
   target: string;
   proxyPort: string | number;
-  scripts?: string[];
   proxyHeaders?: Record<string, string>;
   remoteRules?: RemoteRule[];
   staticRules?: StaticRule[];

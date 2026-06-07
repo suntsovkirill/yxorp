@@ -15,6 +15,7 @@ export class HttpServer {
     private pipeline: Pipeline<[req: IncomingMessage, res: ServerResponse]>,
   ) {
     this.server = http.createServer((req: IncomingMessage, res: ServerResponse) => {
+      req.startTime = Date.now();
       this.pipeline.execute(req, res);
     });
 

@@ -75,3 +75,4 @@ Requires Node >= 18.
 - Pipeline awaits middleware return value — async middleware must return Promise
 - `RawBodyMiddleware` collects proxyRes body into `proxyRes.rawBody` before proceeding
 - `ProxyResMiddleware` strips `transfer-encoding` when setting `content-length`
+- `req.startTime` is set in `HttpServer` on arrival; `src/utils/request-timing.ts#elapsedMs(req)` computes elapsed ms for log lines. Each request gets exactly one log line — `ProxyResMiddleware` logs plain pass-through (`if (!req.rewriteRule)`) since `RewriteMiddleware` already logs rewritten responses

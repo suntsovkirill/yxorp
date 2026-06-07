@@ -44,7 +44,6 @@ export async function createYxorp(configFile: Partial<ConfigFile> & { target: st
     rewriteRules: configFile.rewriteRules || [],
     staticRules: configFile.staticRules || [],
     remoteRules: configFile.remoteRules || [],
-    scripts: configFile.scripts || [],
     proxyOptions,
   });
 

@@ -9,6 +9,16 @@ import { createServer } from './services/yxorp-server.service';
 import { ConfigFile, YxorpConfig } from './types/yxorp-config';
 import { resolveConfig } from './services/config-resolver';
 import { watchConfig } from './services/config-watcher';
+import { validateConfig } from './services/config-validator';
+import { applyCliOverrides } from './services/cli-overrides';
+
+// --- Version flag ---
+if (process.argv.includes('--version') || process.argv.includes('-v')) {
+  const pkgPath = path.join(__dirname, '../package.json');
+  const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
+  console.log(pkg.version);
+  process.exit(0);
+}
 
 // --- Config resolution ---
 let configDir: string;
@@ -22,6 +32,17 @@ try {
   config = resolved.config;
 } catch(e: any) {
   console.error(e.message || e);
+  process.exit(1);
+}
+
+// --- CLI overrides ---
+// e.g. `yxorp --port 4000 --target http://localhost:8080` — flags win over config values.
+config = applyCliOverrides(config, process.argv);
+
+const configErrors = validateConfig(config);
+if (configErrors.length) {
+  console.error('Invalid config:');
+  configErrors.forEach(err => console.error(`  - ${err}`));
   process.exit(1);
 }
 
@@ -47,10 +68,6 @@ function buildProxyConfig(cfg: ConfigFile): YxorpConfig {
   return { ...cfg, proxyOptions };
 }
 
-config?.scripts?.forEach(script => {
-  require(path.resolve(script));
-});
-
 // Manual composition — no DI container
 const logger = new LoggerService();
 const appConfig = new Config();
@@ -60,7 +77,7 @@ const mockRulesMatcher = new MockRulesMatcher(appConfig);
 const rewriteRulesMatcher = new RewriteRulesMatcher(appConfig);
 const remoteRulesMatcher = new RemoteRulesMatcher(appConfig);
 
-const { listen } = createServer(
+const { server, listen } = createServer(
   appConfig,
   logger,
   rewriteRulesMatcher,
@@ -73,11 +90,37 @@ listen(config.proxyPort, () => {
 });
 
 // --- Config hot-reload ---
-watchConfig(
+const configWatcher = watchConfig(
   configPath,
   (newConfig) => {
+    const errors = validateConfig(newConfig);
+
+    if (errors.length) {
+      logger.error('Config reload skipped — invalid config:');
+      errors.forEach(err => logger.error(`  - ${err}`));
+      return;
+    }
+
     appConfig.set(buildProxyConfig(newConfig));
     logger.info('Config reloaded');
   },
   (e: any) => logger.error(`Config reload failed: ${e.message || e}`),
 );
+
+// --- Graceful shutdown ---
+let shuttingDown = false;
+
+function shutdown(signal: string) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+
+  logger.info(`Received ${signal}, shutting down...`);
+  configWatcher.close();
+
+  server.close(() => {
+    process.exit(0);
+  });
+}
+
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));

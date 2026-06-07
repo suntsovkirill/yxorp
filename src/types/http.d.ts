@@ -6,5 +6,6 @@ declare module 'http' {
     mockRule?: import("./yxorp-config").MockRule;
     mockRuleParams?: Object;
     query?: Record<string, any>;
+    startTime?: number;
   }
 }

@@ -47,7 +47,7 @@ Yxorp looks for its config in this order:
 | 2 | `./yxorp.json` | In your project root |
 | 3 | `./.yxorp/settings.json` | Inside a hidden `.yxorp` directory |
 
-When config lives inside `.yxorp/`, all relative paths (scripts, mock files, static directories) are resolved relative to that directory. This keeps things tidy:
+When config lives inside `.yxorp/`, all relative paths (mock files, rewrite files, static directories) are resolved relative to that directory. This keeps things tidy:
 
 ```
 my-project/
@@ -57,6 +57,14 @@ my-project/
       users.js
     static/
       logo.svg
+```
+
+### CLI overrides
+
+`--port` and `--target` override the corresponding config values without touching the file — handy for one-off runs or scripting:
+
+```bash
+yxorp --port 4000 --target http://localhost:8080
 ```
 
 ---
@@ -96,40 +104,6 @@ Extra HTTP headers to send with every proxied request to the target server. Usef
 
 ---
 
-### `scripts`
-
-Additional JavaScript files loaded **once at startup**. Use them to set up shared data or helpers for your mock/rewrite scripts.
-
-Why `scripts` and not just `require()` inside each mock file? Because mock scripts are hot-reloaded on every request (their module cache is cleared). Any data they `require()` would also need to be re-imported. Scripts loaded via the `scripts` array sidestep this — they run once at startup and can stash data on `globalThis` for all mock/rewrite scripts to use.
-
-```json
-"scripts": [
-  "./scripts/seed-data.js"
-]
-```
-
-```javascript
-// scripts/seed-data.js — runs once, survives hot-reload
-globalThis.users = [
-  { id: 1, name: 'Alice' },
-  { id: 2, name: 'Bob' },
-];
-```
-
-```javascript
-// mock/user.js — hot-reloaded on every request, but seed-data is untouched
-module.exports = (req, res) => {
-  const user = globalThis.users.find(u => u.id === Number(req.params.id));
-  res.end(JSON.stringify(user));
-};
-```
-
-As a rule of thumb:
-- **`scripts`** — for data you initialize once (lookup tables, config, seed data)
-- **`require()` inside mock/rewrite files** — for utility helpers you want imported fresh each time
-
----
-
 ### Mock Rules (`mockRules`)
 
 Intercept a matching request **before** it reaches the target and respond immediately. The target server never sees it.
@@ -155,7 +129,7 @@ Intercept a matching request **before** it reaches the target and respond immedi
 }
 ```
 
-The script receives `req` and `res` and does whatever it wants:
+The script receives the raw Node.js `req` (`IncomingMessage`) and `res` (`ServerResponse`) — **just like writing a tiny backend**. There's no magic layered on top: you're fully responsible for setting the status code, headers, and body yourself, exactly as the real target server would.
 
 ```javascript
 // ./mock/create-user.js
@@ -165,6 +139,10 @@ module.exports = (req, res) => {
   res.end(JSON.stringify({ id: 42, status: 'created' }));
 };
 ```
+
+If you don't set `res.statusCode`, it defaults to Node's `200`. If you don't call `res.end()`, the response hangs — Yxorp won't do it for you. The only assist it provides: if the script finishes without sending headers, Yxorp sets `content-type: application/json` for you (handy for quick `res.end(JSON.stringify(...))` one-liners).
+
+This mirrors how a real backend works on purpose — mock scripts are meant to **stand in for the target server**, so the same rules apply: you decide what the client receives, down to the last header.
 
 **Hot-reload is built-in** — edit the script file and the next request picks up changes automatically. No restart needed.
 
@@ -294,10 +272,6 @@ Here's a complete config showing all features in action:
 {
   "target": "https://api.example.com",
   "proxyPort": 3000,
-
-  "scripts": [
-    "./scripts/globals.js"
-  ],
 
   "staticRules": [
     {
