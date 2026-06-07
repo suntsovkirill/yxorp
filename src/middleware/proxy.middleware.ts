@@ -18,10 +18,19 @@ export class ProxyMiddleware implements Middleware<[req: IncomingMessage, res: S
     const url = req.url || '';
 
     const proxyOptions = this.config.get().proxyOptions;
-    const remoteRule = this.remoteRulesMatcher.match(url);
-    const target = remoteRule
-      ? this.remoteRulesMatcher.toPath(url, remoteRule)
-      : undefined;
+
+    let target: string | undefined;
+
+    try {
+      const remoteRule = this.remoteRulesMatcher.match(url);
+      target = remoteRule
+        ? this.remoteRulesMatcher.toPath(url, remoteRule)
+        : undefined;
+    } catch (e) {
+      // A malformed `remoteRules[].path` pattern would otherwise throw
+      // synchronously here on every request — fall back to the default target.
+      this.logger.error(e);
+    }
 
     const options = {
       ...proxyOptions,

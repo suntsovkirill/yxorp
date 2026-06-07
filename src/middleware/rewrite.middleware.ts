@@ -35,7 +35,7 @@ export class RewriteMiddleware implements Middleware<[proxyRes: IncomingMessage,
           proxyRes.rawBody = await encodeBuffer(rewritedResponse, encoding);
         }
 
-        this.logger.info(`rewrite       ${proxyRes.statusCode} ${req.method} ${req.url} ${elapsedMs(req)}ms`);
+        this.logRewrite(req, proxyRes);
 
         next();
         return;
@@ -48,7 +48,7 @@ export class RewriteMiddleware implements Middleware<[proxyRes: IncomingMessage,
           proxyRes.statusCode = rewriteRule.statusCode;
         }
 
-        this.logger.info(`rewrite       ${proxyRes.statusCode} ${req.method} ${req.url} ${elapsedMs(req)}ms`);
+        this.logRewrite(req, proxyRes);
 
         next();
         return;
@@ -57,7 +57,23 @@ export class RewriteMiddleware implements Middleware<[proxyRes: IncomingMessage,
       next();
     } catch (e) {
       this.logger.error(e);
+
+      // Even on failure the response still goes out via ProxyResMiddleware —
+      // make sure the request still gets exactly one access-log line.
+      this.logRewrite(req, proxyRes);
+
       next();
     }
+  }
+
+  /**
+   * Logs the access line for a rewritten response and marks the request as
+   * logged, so ProxyResMiddleware (which would otherwise also log plain
+   * pass-through responses) knows to stay silent — including on the error path
+   * above, where the rewrite itself failed but the response still went out.
+   */
+  private logRewrite(req: IncomingMessage, proxyRes: IncomingMessage): void {
+    req.rewriteLogged = true;
+    this.logger.info(`rewrite       ${proxyRes.statusCode} ${req.method} ${req.url} ${elapsedMs(req)}ms`);
   }
 }

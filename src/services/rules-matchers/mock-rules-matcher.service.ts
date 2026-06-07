@@ -1,42 +1,15 @@
 import { Config } from '../config.service';
-import { match } from 'path-to-regexp';
 import { MockRule } from '../../types/yxorp-config';
+import { MethodPathRulesMatcher } from './method-path-rules-matcher';
 
-export class MockRulesMatcher {
+export class MockRulesMatcher extends MethodPathRulesMatcher<MockRule> {
   constructor(
-    private config: Config
+    private config: Config,
   ) {
+    super();
   }
 
-  public match(url: string, method: string): MockRule | undefined {
-    const mockRules = this.config.get().mockRules || [];
-
-    for (let mockRule of mockRules) {
-      if (mockRule.disable) {
-        continue;
-      }
-
-      if (mockRule.method.toLowerCase() !== method.toLowerCase()) {
-        continue;
-      }
-
-      const matchResult = match<Record<string, string>>(mockRule.path, {
-        decode: decodeURIComponent,
-      })(url);
-
-      if (matchResult) {
-        return mockRule;
-      }
-    }
-  }
-
-  public params(url: string, mockRule: MockRule): Object | undefined {
-    const matchResult = match(mockRule.path, {
-      decode: decodeURIComponent,
-    })(url);
-
-    if (matchResult) {
-      return matchResult.params;
-    }
+  protected getRules(): MockRule[] {
+    return this.config.get().mockRules || [];
   }
 }

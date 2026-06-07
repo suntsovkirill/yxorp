@@ -37,4 +37,20 @@ describe('cli-overrides', () => {
     applyCliOverrides(baseConfig, ['node', 'yxorp', '--port', '4000']);
     expect(baseConfig).toEqual(original);
   });
+
+  it('supports --flag=value syntax', () => {
+    const result = applyCliOverrides(baseConfig, ['node', 'yxorp', '--port=4000', '--target=http://localhost:8080']);
+    expect(result).toMatchObject({ proxyPort: '4000', target: 'http://localhost:8080' });
+  });
+
+  it('supports --flag=value syntax with an empty value', () => {
+    const result = applyCliOverrides(baseConfig, ['node', 'yxorp', '--port=']);
+    expect(result.proxyPort).toBe('');
+  });
+
+  it('does not swallow a following flag as this flag\'s value', () => {
+    const result = applyCliOverrides(baseConfig, ['node', 'yxorp', '--port', '--target', 'http://localhost:8080']);
+    expect(result.proxyPort).toBe(3000);
+    expect(result.target).toBe('http://localhost:8080');
+  });
 });

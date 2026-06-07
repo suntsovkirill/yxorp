@@ -25,6 +25,8 @@ RawBodyMiddleware → RewriteMiddleware → ProxyResMiddleware
 - `src/services/config-watcher.ts` — `watchConfig(path, onReload, onError)` — file watcher with 100ms debounce
 - `src/services/http-server.service.ts` — wrapper around `http.createServer`
 - `src/services/http-proxy.service.ts` — wrapper around httpxy
+- `src/services/config-validator.ts` — validates the resolved config shape (proxy port range, per-rule entry shapes for mock/rewrite/remote/static rules) before the server starts
+- `src/services/cli-overrides.ts` — `applyCliOverrides(config, argv)` layers `--port`/`--target`/`--port=value` CLI flags on top of the resolved config without touching the file
 
 ### Dependency injection
 No DI container. Everything is manually composed in `index.ts`:
@@ -75,4 +77,7 @@ Requires Node >= 18.
 - Pipeline awaits middleware return value — async middleware must return Promise
 - `RawBodyMiddleware` collects proxyRes body into `proxyRes.rawBody` before proceeding
 - `ProxyResMiddleware` strips `transfer-encoding` when setting `content-length`
-- `req.startTime` is set in `HttpServer` on arrival; `src/utils/request-timing.ts#elapsedMs(req)` computes elapsed ms for log lines. Each request gets exactly one log line — `ProxyResMiddleware` logs plain pass-through (`if (!req.rewriteRule)`) since `RewriteMiddleware` already logs rewritten responses
+- `req.startTime` is set in `HttpServer` on arrival; `src/utils/request-timing.ts#elapsedMs(req)` computes elapsed ms for log lines. Each request gets exactly one log line — `RewriteMiddleware` sets `req.rewriteLogged = true` on every exit path (including its catch block) right before logging, and `ProxyResMiddleware` only logs plain pass-through when `!req.rewriteLogged`. Use this flag rather than `req.rewriteRule` truthiness — the rule can be set without a log line ever being emitted on an exception path
+- `MockRulesMatcher`/`RewriteRulesMatcher` extend the shared `MethodPathRulesMatcher<T>` base (`src/services/rules-matchers/method-path-rules-matcher.ts`), which only requires `getRules()`. Use `matchWithParams(url, method)` to get the matched rule and its decoded path params in a single pass — `match()` + `params()` back to back would compile/run `path-to-regexp` twice for the same lookup
+- Anything that calls into `path-to-regexp`'s `match()` with a user-supplied path pattern (config rules) must be wrapped in try/catch — malformed patterns throw synchronously (e.g. `match('/api/:[bad')` throws `Missing parameter name`)
+- Pipeline execution and `httpProxy.web()` calls return promises that must be awaited or `.catch()`-handled — an uncaught rejection here crashes the process. `HttpServer`, `ProxyMiddleware`, and `yxorp-server.service.ts`'s `upgrade` handler all guard against this and respond with a `502` if headers haven't been sent yet

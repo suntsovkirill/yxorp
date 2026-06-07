@@ -26,9 +26,10 @@ export class ProxyResMiddleware implements Middleware<[proxyRes: IncomingMessage
       res.setHeader('content-length', response.length);
       res.end(response);
 
-      // RewriteMiddleware already logs rewritten responses — log here only for plain pass-through,
-      // so every proxied request gets exactly one log line.
-      if (!req.rewriteRule) {
+      // RewriteMiddleware already logs rewritten responses (success AND failure —
+      // it sets req.rewriteLogged in both cases) — log here only for plain
+      // pass-through, so every proxied request gets exactly one log line.
+      if (!req.rewriteLogged) {
         this.logger.info(`proxy         ${res.statusCode} ${req.method} ${req.url} ${elapsedMs(req)}ms`);
       }
     } catch(e) {

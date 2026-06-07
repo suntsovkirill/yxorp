@@ -29,7 +29,7 @@ export function createServer(
   // 1. Proxy pipeline (outgoing responses) — no deps on proxy/server
   const proxyPipeline = new Pipeline<[proxyRes: IncomingMessage, req: IncomingMessage, res: ServerResponse]>();
   proxyPipeline.use(
-    new RawBodyMiddleware(),
+    new RawBodyMiddleware(logger),
     new RewriteMiddleware(logger),
     new ProxyResMiddleware(logger),
   );
@@ -47,21 +47,40 @@ export function createServer(
   );
 
   // 4. HttpServer wraps the server pipeline
-  const server = new HttpServer(serverPipeline);
+  const server = new HttpServer(serverPipeline, logger);
 
   // 5. Attach proxy pipeline to proxyRes event
   proxy.on('proxyRes', ((proxyRes: IncomingMessage, req: IncomingMessage, res: ServerResponse) => {
-    proxy.execute(proxyRes, req, res);
+    // proxy.execute() is async — an uncaught rejection here would otherwise
+    // become an unhandled promise rejection and can crash the whole process,
+    // leaving the client hanging with no response.
+    proxy.execute(proxyRes, req, res).catch((e: any) => {
+      logger.error(e);
+
+      if (!res.headersSent) {
+        res.statusCode = 502;
+        res.end();
+      }
+    });
   }) as any);
 
   // 6. WebSocket upgrade handling
   server.addListener('upgrade', (req: IncomingMessage, socket: Duplex, head: Buffer) => {
     const url = req.url || '';
     const proxyOptions = config.get().proxyOptions;
-    const remoteRule = remoteRulesMatcher.match(url, true);
-    const target = remoteRule
-      ? remoteRulesMatcher.toPath(url, remoteRule)
-      : undefined;
+
+    let target: string | undefined;
+
+    try {
+      const remoteRule = remoteRulesMatcher.match(url, true);
+      target = remoteRule
+        ? remoteRulesMatcher.toPath(url, remoteRule)
+        : undefined;
+    } catch (e) {
+      // A malformed `remoteRules[].path` pattern would otherwise throw
+      // synchronously here on every upgrade — fall back to the default target.
+      logger.error(e);
+    }
 
     const options = {
       ...proxyOptions,

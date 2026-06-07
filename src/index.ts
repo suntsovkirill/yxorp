@@ -108,6 +108,7 @@ const configWatcher = watchConfig(
 );
 
 // --- Graceful shutdown ---
+const SHUTDOWN_TIMEOUT_MS = 5000;
 let shuttingDown = false;
 
 function shutdown(signal: string) {
@@ -117,7 +118,18 @@ function shutdown(signal: string) {
   logger.info(`Received ${signal}, shutting down...`);
   configWatcher.close();
 
+  // server.close()'s callback only fires once every open connection is
+  // closed — keep-alive HTTP sockets and proxied WebSocket connections
+  // (proxyOptions has `ws: true`) can keep it pending indefinitely. Force
+  // an exit after a grace period so a stuck connection can't hang the process.
+  const forceExitTimer = setTimeout(() => {
+    logger.error(`Graceful shutdown timed out after ${SHUTDOWN_TIMEOUT_MS}ms — forcing exit`);
+    process.exit(1);
+  }, SHUTDOWN_TIMEOUT_MS);
+  forceExitTimer.unref();
+
   server.close(() => {
+    clearTimeout(forceExitTimer);
     process.exit(0);
   });
 }

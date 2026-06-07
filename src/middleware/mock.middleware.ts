@@ -26,12 +26,23 @@ export class MockMiddleware implements Middleware<[req: IncomingMessage, res: Se
         delete require.cache[require.resolve(fullPath)];
         const handler = require(fullPath);
 
-        if (typeof handler === 'function') {
-          await handler(req, res);
+        if (typeof handler !== 'function') {
+          // A script that doesn't export a function (e.g. `exports.handler = ...`
+          // instead of `module.exports = ...`) would otherwise leave the request
+          // hanging forever — respond with a clear error instead.
+          res.statusCode = 500;
+          res.setHeader('content-type', 'application/json');
+          res.end(JSON.stringify({ error: `Mock script "${mockRule.script}" does not export a function` }));
 
-          if (!res.headersSent) {
-            res.setHeader('content-type', 'application/json');
-          }
+          this.logger.error(`Mock script "${fullPath}" does not export a function (module.exports = (req, res) => {...})`);
+          this.logger.info(`mock         ${res.statusCode} ${req.method} ${req.url} ${elapsedMs(req)}ms`);
+          return;
+        }
+
+        await handler(req, res);
+
+        if (!res.headersSent) {
+          res.setHeader('content-type', 'application/json');
         }
 
         this.logger.info(`mock         ${res.statusCode || 200} ${req.method} ${req.url} ${elapsedMs(req)}ms`);
@@ -58,6 +69,20 @@ export class MockMiddleware implements Middleware<[req: IncomingMessage, res: Se
       next();
     } catch (e) {
       this.logger.error(e);
+
+      // If the script handler already wrote (part of) a response before throwing,
+      // calling next() would send the request into ProxyMiddleware/httpProxy.web,
+      // which would try to write to an already-finished response.
+      if (res.headersSent) {
+        this.logger.info(`mock         ${res.statusCode} ${req.method} ${req.url} ${elapsedMs(req)}ms`);
+
+        if (!res.writableEnded) {
+          res.end();
+        }
+
+        return;
+      }
+
       next();
     }
   }

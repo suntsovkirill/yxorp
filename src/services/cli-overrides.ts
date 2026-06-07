@@ -1,8 +1,29 @@
 import { ConfigFile } from '../types/yxorp-config';
 
+/**
+ * Reads a flag's value from argv, supporting both `--flag value` and
+ * `--flag=value` forms. For the space-separated form, a following token that
+ * itself looks like a flag (starts with `--`) is NOT treated as this flag's
+ * value — `--port --target http://x` should leave `--port` unset rather than
+ * swallowing `--target` as its value.
+ */
 function getArgValue(argv: string[], flag: string): string | undefined {
-  const index = argv.indexOf(flag);
-  return index !== -1 && index + 1 < argv.length ? argv[index + 1] : undefined;
+  const prefix = `${flag}=`;
+
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i];
+
+    if (arg.startsWith(prefix)) {
+      return arg.slice(prefix.length);
+    }
+
+    if (arg === flag) {
+      const next = argv[i + 1];
+      return next !== undefined && !next.startsWith('--') ? next : undefined;
+    }
+  }
+
+  return undefined;
 }
 
 /**

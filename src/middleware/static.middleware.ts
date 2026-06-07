@@ -2,11 +2,11 @@ import { ServerResponse, IncomingMessage } from 'http';
 import path from 'path';
 import fs from 'fs/promises';
 import mime from 'mime';
-import { Dirent } from 'fs';
 import { Config } from '../services/config.service';
 import { Middleware } from '../services/pipeline.service';
 import { LoggerService } from '../services/logger.service';
 import { elapsedMs } from '../utils/request-timing';
+import { StaticRule } from '../types/yxorp-config';
 
 export class StaticMiddleware implements Middleware<[req: IncomingMessage, res: ServerResponse]> {
   constructor(
@@ -31,41 +31,15 @@ export class StaticMiddleware implements Middleware<[req: IncomingMessage, res: 
         return;
       }
 
-      const pathToDirectory = path.resolve(currentStaticRule.directory);
-
-      const dirents = await this.readdir(pathToDirectory);
-
-      const filePath = dirents
-        .filter(dirent => !dirent.isDirectory())
-        .map(dirent => ({
-          urlPath: path.join(
-            currentStaticRule.path,
-            path.join(dirent.path, dirent.name).replace(pathToDirectory, '')
-          ).replace(/\\/g, '/'),
-          path: path.join(dirent.path, dirent.name).replace(/\\/g, '/'),
-        }
-        ))
-        .filter(dirent => {
-          const pathname = path.extname(urlPath)
-            ? urlPath
-            : path.join(urlPath, currentStaticRule.directoryIndex || '').replace(/\\/g, '/');
-
-          if (currentStaticRule.caseInsensitive) {
-            return dirent.urlPath.toLocaleLowerCase() === pathname.toLowerCase();
-          } else {
-            return dirent.urlPath === pathname;
-          }
-        })
-        .map(dirent => dirent.path)[0];
-
+      const filePath = await this.resolveFile(currentStaticRule, urlPath);
 
       if (!filePath) {
         next();
         return;
       }
 
-      const file = await fs.readFile(path.resolve(filePath));
-      const mimeType = mime.getType(path.resolve(filePath));
+      const file = await fs.readFile(filePath);
+      const mimeType = mime.getType(filePath);
 
       if (mimeType) {
         res.setHeader('content-type', mimeType);
@@ -81,23 +55,81 @@ export class StaticMiddleware implements Middleware<[req: IncomingMessage, res: 
     }
   }
 
-  private async readdir(pathname: string, subpathname?: string): Promise<Dirent[]> {
-    const files: Dirent[] = [];
-    const fullpath = path.join(pathname, subpathname || '');
+  /**
+   * Resolves a request URL path to an actual file on disk under the rule's
+   * directory — without enumerating the whole directory tree on every request
+   * (the previous implementation did a full recursive `readdir` per request,
+   * the most expensive thing on this hot path).
+   *
+   * Fast path: build the candidate path directly from the URL and `fs.stat`
+   * it — this covers the overwhelming majority of requests (correct case,
+   * matches exactly) with zero directory listings.
+   *
+   * Fallback (only when the fast path misses AND `caseInsensitive` is set):
+   * walk down the path segment by segment, listing only the relevant
+   * directory at each level and matching case-insensitively — far cheaper
+   * than enumerating the entire tree just to find one file.
+   */
+  private async resolveFile(rule: StaticRule, urlPath: string): Promise<string | undefined> {
+    const directory = path.resolve(rule.directory);
+    const relativeUrlPath = urlPath.slice(rule.path.length);
 
-    const dirents = await fs.readdir(fullpath, {
-      withFileTypes: true,
-    });
+    const pathname = path.extname(relativeUrlPath)
+      ? relativeUrlPath
+      : path.join(relativeUrlPath, rule.directoryIndex || '');
 
-    for (let dirent of dirents) {
-      dirent.path = fullpath;
-      files.push(dirent);
+    const segments = pathname.split(/[\\/]+/).filter(Boolean);
 
-      if (dirent.isDirectory()) {
-        files.push(...await this.readdir(fullpath, dirent.name));
-      }
+    // Defense in depth — `new URL()` already normalizes `..` segments out of
+    // urlPath, but reject anything that could still escape `directory`.
+    if (segments.includes('..')) {
+      return undefined;
     }
 
-    return files;
+    if (segments.length === 0) {
+      return undefined;
+    }
+
+    const exactPath = path.join(directory, ...segments);
+
+    if (await this.isFile(exactPath)) {
+      return exactPath;
+    }
+
+    if (!rule.caseInsensitive) {
+      return undefined;
+    }
+
+    let current = directory;
+
+    for (const segment of segments) {
+      const match = await this.findCaseInsensitive(current, segment);
+
+      if (!match) {
+        return undefined;
+      }
+
+      current = path.join(current, match);
+    }
+
+    return (await this.isFile(current)) ? current : undefined;
+  }
+
+  private async isFile(filePath: string): Promise<boolean> {
+    try {
+      const stats = await fs.stat(filePath);
+      return stats.isFile();
+    } catch {
+      return false;
+    }
+  }
+
+  private async findCaseInsensitive(directory: string, name: string): Promise<string | undefined> {
+    try {
+      const entries = await fs.readdir(directory);
+      return entries.find(entry => entry.toLowerCase() === name.toLowerCase());
+    } catch {
+      return undefined;
+    }
   }
 }

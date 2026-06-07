@@ -1,5 +1,6 @@
 import http, { IncomingMessage, Server, ServerResponse } from 'http';
 import { Pipeline } from './pipeline.service';
+import { LoggerService } from './logger.service';
 
 export class HttpServer {
   public readonly use: Pipeline<[IncomingMessage, ServerResponse]>['use'];
@@ -13,10 +14,22 @@ export class HttpServer {
 
   constructor(
     private pipeline: Pipeline<[req: IncomingMessage, res: ServerResponse]>,
+    private logger: LoggerService,
   ) {
     this.server = http.createServer((req: IncomingMessage, res: ServerResponse) => {
       req.startTime = Date.now();
-      this.pipeline.execute(req, res);
+
+      // pipeline.execute() is async — an uncaught rejection here (e.g. a
+      // synchronous throw deep in a middleware) would otherwise become an
+      // unhandled promise rejection and can crash the whole process.
+      this.pipeline.execute(req, res).catch((e) => {
+        this.logger.error(e);
+
+        if (!res.headersSent) {
+          res.statusCode = 502;
+          res.end();
+        }
+      });
     });
 
     this.use = this.pipeline.use.bind(this.pipeline);
