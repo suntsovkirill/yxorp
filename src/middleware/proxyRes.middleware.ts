@@ -1,7 +1,8 @@
 import { IncomingMessage, ServerResponse } from 'http';
 import { Middleware } from '../services/pipeline.service';
 import { LoggerService } from '../services/logger.service';
-import { elapsedMs } from '../utils/request-timing';
+import { formatAccessLog } from '../utils/access-log';
+import { isHopByHopHeader } from '../utils/headers';
 
 export class ProxyResMiddleware implements Middleware<[proxyRes: IncomingMessage, req: IncomingMessage, res: ServerResponse]> {
   constructor(
@@ -11,9 +12,10 @@ export class ProxyResMiddleware implements Middleware<[proxyRes: IncomingMessage
 
   public use(proxyRes: IncomingMessage, req: IncomingMessage, res: ServerResponse): void {
     try {
-      // Skip transfer-encoding since we reconstruct the body with known length
+      // Hop-by-hop headers (incl. transfer-encoding, since we reconstruct the
+      // body with a known length) must not be forwarded to the client.
       for (let key in proxyRes.headers) {
-        if (key === 'transfer-encoding') continue;
+        if (isHopByHopHeader(key, proxyRes.headers)) continue;
         res.setHeader(key, proxyRes.headers[key] as any);
       }
 
@@ -30,7 +32,7 @@ export class ProxyResMiddleware implements Middleware<[proxyRes: IncomingMessage
       // it sets req.rewriteLogged in both cases) — log here only for plain
       // pass-through, so every proxied request gets exactly one log line.
       if (!req.rewriteLogged) {
-        this.logger.info(`proxy         ${res.statusCode} ${req.method} ${req.url} ${elapsedMs(req)}ms`);
+        this.logger.info(formatAccessLog('proxy', res.statusCode, req));
       }
     } catch(e) {
       this.logger.error(e);

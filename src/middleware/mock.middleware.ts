@@ -4,7 +4,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import { Middleware } from '../services/pipeline.service';
 import { LoggerService } from '../services/logger.service';
-import { elapsedMs } from '../utils/request-timing';
+import { formatAccessLog } from '../utils/access-log';
 
 export class MockMiddleware implements Middleware<[req: IncomingMessage, res: ServerResponse]> {
   constructor(
@@ -35,7 +35,7 @@ export class MockMiddleware implements Middleware<[req: IncomingMessage, res: Se
           res.end(JSON.stringify({ error: `Mock script "${mockRule.script}" does not export a function` }));
 
           this.logger.error(`Mock script "${fullPath}" does not export a function (module.exports = (req, res) => {...})`);
-          this.logger.info(`mock         ${res.statusCode} ${req.method} ${req.url} ${elapsedMs(req)}ms`);
+          this.logger.info(formatAccessLog('mock', res.statusCode, req));
           return;
         }
 
@@ -45,7 +45,7 @@ export class MockMiddleware implements Middleware<[req: IncomingMessage, res: Se
           res.setHeader('content-type', 'application/json');
         }
 
-        this.logger.info(`mock         ${res.statusCode || 200} ${req.method} ${req.url} ${elapsedMs(req)}ms`);
+        this.logger.info(formatAccessLog('mock', res.statusCode || 200, req));
         return;
       }
 
@@ -62,7 +62,7 @@ export class MockMiddleware implements Middleware<[req: IncomingMessage, res: Se
         res.setHeader('content-length', file.length);
         res.end(file);
 
-        this.logger.info(`mock         ${res.statusCode} ${req.method} ${req.url} ${elapsedMs(req)}ms`);
+        this.logger.info(formatAccessLog('mock', res.statusCode, req));
         return;
       }
 
@@ -74,7 +74,7 @@ export class MockMiddleware implements Middleware<[req: IncomingMessage, res: Se
       // calling next() would send the request into ProxyMiddleware/httpProxy.web,
       // which would try to write to an already-finished response.
       if (res.headersSent) {
-        this.logger.info(`mock         ${res.statusCode} ${req.method} ${req.url} ${elapsedMs(req)}ms`);
+        this.logger.info(formatAccessLog('mock', res.statusCode, req));
 
         if (!res.writableEnded) {
           res.end();

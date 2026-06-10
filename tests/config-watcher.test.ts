@@ -49,6 +49,33 @@ describe('config-watcher', () => {
     });
   });
 
+  it('detects changes saved via atomic rename (e.g. editor-style saves)', async () => {
+    const tmpFile = path.join(os.tmpdir(), `yxorp-test-${Date.now()}.json`);
+    tmpFiles.push(tmpFile);
+
+    const initial: ConfigFile = { target: 'http://localhost:3000', proxyPort: 0 };
+    fs.writeFileSync(tmpFile, JSON.stringify(initial));
+
+    let reloaded: ConfigFile | null = null;
+    const watcher = watchConfig(tmpFile, (cfg) => { reloaded = cfg; }, () => {});
+    watchers.push(watcher);
+
+    // Many editors save by writing to a temp file and renaming it over the
+    // original — this swaps the inode rather than modifying it in place.
+    const swapFile = `${tmpFile}.tmp`;
+    tmpFiles.push(swapFile);
+    const updated: ConfigFile = { target: 'http://localhost:5000', proxyPort: 0 };
+    fs.writeFileSync(swapFile, JSON.stringify(updated));
+    fs.renameSync(swapFile, tmpFile);
+
+    await new Promise(resolve => setTimeout(resolve, 400));
+
+    softExpect(() => {
+      expect(reloaded).not.toBeNull();
+      expect(reloaded!.target).toBe('http://localhost:5000');
+    });
+  });
+
   it('calls onError when file contains invalid JSON', async () => {
     const tmpFile = path.join(os.tmpdir(), `yxorp-test-${Date.now()}.json`);
     tmpFiles.push(tmpFile);

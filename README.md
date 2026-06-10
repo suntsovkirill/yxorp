@@ -264,6 +264,14 @@ For more advanced patterns, see the [path-to-regexp documentation](https://githu
 
 ---
 
+### A Note on Script Security
+
+Mock and rewrite scripts (`"script": "./path/to/file.js"`) are loaded with Node's `require()` and run with the same privileges as Yxorp itself — full filesystem, network, and process access, with no sandboxing.
+
+Only point Yxorp at config files (and the scripts they reference) that you trust, the same way you'd treat any other local Node script. Don't load a config from an untrusted source.
+
+---
+
 ## Full Example
 
 Here's a complete config showing all features in action:

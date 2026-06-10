@@ -19,7 +19,7 @@ export abstract class MethodPathRulesMatcher<T extends MethodPathRule> {
     return this.find(url, method)?.rule;
   }
 
-  public params(url: string, rule: T): Object | undefined {
+  public params(url: string, rule: T): Record<string, string> | undefined {
     return this.matchPath(rule.path, url)?.params;
   }
 
@@ -28,12 +28,12 @@ export abstract class MethodPathRulesMatcher<T extends MethodPathRule> {
    * compiling/running the path-to-regexp matcher twice (once via `match()`,
    * again via `params()`) for the same url+rule, as BootstrapMiddleware does.
    */
-  public matchWithParams(url: string, method: string): { rule: T; params: Object } | undefined {
+  public matchWithParams(url: string, method: string): { rule: T; params: Record<string, string> } | undefined {
     const found = this.find(url, method);
     return found ? { rule: found.rule, params: found.matchResult.params } : undefined;
   }
 
-  private find(url: string, method: string): { rule: T; matchResult: { params: Object } } | undefined {
+  private find(url: string, method: string): { rule: T; matchResult: { params: Record<string, string> } } | undefined {
     for (const rule of this.getRules()) {
       if (rule.disable) {
         continue;
@@ -51,7 +51,7 @@ export abstract class MethodPathRulesMatcher<T extends MethodPathRule> {
     }
   }
 
-  private matchPath(path: string, url: string): { params: Object } | undefined {
+  private matchPath(path: string, url: string): { params: Record<string, string> } | undefined {
     const matchResult = match<Record<string, string>>(path, {
       decode: decodeURIComponent,
     })(url);

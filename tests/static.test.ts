@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import path from 'path';
+import fs from 'fs';
+import os from 'os';
 import { startTargetServer, stopTargetServer } from './helpers/target-server';
 import { createYxorp, fetchYxorp } from './helpers/create-yxorp';
 import http from 'http';
@@ -58,5 +60,51 @@ describe('Static file serving', () => {
     expect(res.statusCode).toBe(200);
     const data = JSON.parse(res.body);
     expect(data.name).toBe('Alice');
+  });
+});
+
+describe('Symlink containment', () => {
+  const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'yxorp-symlink-'));
+  const staticDir = path.join(tmpRoot, 'static');
+  const outsideDir = path.join(tmpRoot, 'outside');
+  fs.mkdirSync(staticDir);
+  fs.mkdirSync(outsideDir);
+
+  const secretFile = path.join(outsideDir, 'secret.txt');
+  fs.writeFileSync(secretFile, 'top secret');
+
+  // Symlink creation requires elevated privileges on some platforms
+  // (notably Windows without Developer Mode) — skip this suite there.
+  let symlinkSupported = true;
+  try {
+    fs.symlinkSync(secretFile, path.join(staticDir, 'escape.txt'), 'file');
+  } catch {
+    symlinkSupported = false;
+  }
+
+  let symlinkYxorp: { port: number; stop: () => Promise<void> };
+
+  beforeAll(async () => {
+    if (!symlinkSupported) return;
+
+    symlinkYxorp = await createYxorp({
+      target: `http://localhost:${targetPort}`,
+      staticRules: [
+        {
+          path: '/static',
+          directory: staticDir,
+        },
+      ],
+    });
+  });
+
+  afterAll(async () => {
+    await symlinkYxorp?.stop();
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
+  });
+
+  it.skipIf(!symlinkSupported)('does not serve a file outside the static directory via a symlink', async () => {
+    const res = await fetchYxorp(symlinkYxorp.port, '/static/escape.txt');
+    expect(res.body).not.toContain('top secret');
   });
 });

@@ -1,11 +1,11 @@
-import { IncomingMessage } from 'http';
+import { IncomingMessage, ServerResponse } from 'http';
 import qs from 'qs';
 import { Middleware } from '../services/pipeline.service';
 import { RewriteRulesMatcher } from '../services/rules-matchers/rewrite-rules-matcher.service';
 import { MockRulesMatcher } from '../services/rules-matchers/mock-rules-matcher.service';
 import { LoggerService } from '../services/logger.service';
 
-export class BootstrapMiddleware implements Middleware<[req: IncomingMessage, res: any]> {
+export class BootstrapMiddleware implements Middleware<[req: IncomingMessage, res: ServerResponse]> {
   constructor(
     private rewriteRulesMatcher: RewriteRulesMatcher,
     private mockRulesMatcher: MockRulesMatcher,
@@ -13,7 +13,7 @@ export class BootstrapMiddleware implements Middleware<[req: IncomingMessage, re
   ) {
   }
 
-  public use(req: IncomingMessage, _res: any, next: () => void): void {
+  public use(req: IncomingMessage, _res: ServerResponse, next: () => void): void {
     try {
       this.setRewriteRule(req);
       this.setMockRule(req);

@@ -1,10 +1,10 @@
 import { IncomingMessage, ServerResponse } from 'http';
-import { createProxyServer } from 'httpxy';
+import { createProxyServer, ProxyServer } from 'httpxy';
 import { Pipeline } from './pipeline.service';
 
 export class HttpProxy {
-  public readonly on: (...args: any[]) => any;
-  private proxy: any;
+  public readonly on: ProxyServer<IncomingMessage, ServerResponse>['on'];
+  private proxy: ProxyServer<IncomingMessage, ServerResponse>;
 
   constructor(
     private pipeline: Pipeline<[proxyRes: IncomingMessage, req: IncomingMessage, res: ServerResponse]>,

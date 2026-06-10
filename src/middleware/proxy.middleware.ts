@@ -38,6 +38,16 @@ export class ProxyMiddleware implements Middleware<[req: IncomingMessage, res: S
       target: target || proxyOptions.target,
     };
 
-    this.httpProxy.web(req, res, options).catch((error: any) => this.logger.error(error));
+    this.httpProxy.web(req, res, options).catch((error: any) => {
+      // httpxy rejects web()'s promise when the proxy has no 'error' listener
+      // (e.g. target ECONNREFUSED/DNS failure) — without this, the client
+      // would otherwise hang forever waiting for a response that never comes.
+      this.logger.error(error);
+
+      if (!res.headersSent) {
+        res.statusCode = 502;
+        res.end();
+      }
+    });
   }
 }

@@ -5,7 +5,7 @@ import mime from 'mime';
 import { Config } from '../services/config.service';
 import { Middleware } from '../services/pipeline.service';
 import { LoggerService } from '../services/logger.service';
-import { elapsedMs } from '../utils/request-timing';
+import { formatAccessLog } from '../utils/access-log';
 import { StaticRule } from '../types/yxorp-config';
 
 export class StaticMiddleware implements Middleware<[req: IncomingMessage, res: ServerResponse]> {
@@ -48,7 +48,7 @@ export class StaticMiddleware implements Middleware<[req: IncomingMessage, res: 
       res.setHeader('content-length', file.length);
       res.end(file);
 
-      this.logger.info(`static        ${res.statusCode} ${req.method} ${req.url} ${elapsedMs(req)}ms`);
+      this.logger.info(formatAccessLog('static', res.statusCode, req));
     } catch (e) {
       this.logger.error(e);
       next();
@@ -92,7 +92,7 @@ export class StaticMiddleware implements Middleware<[req: IncomingMessage, res: 
 
     const exactPath = path.join(directory, ...segments);
 
-    if (await this.isFile(exactPath)) {
+    if (await this.isFile(exactPath, directory)) {
       return exactPath;
     }
 
@@ -112,13 +112,30 @@ export class StaticMiddleware implements Middleware<[req: IncomingMessage, res: 
       current = path.join(current, match);
     }
 
-    return (await this.isFile(current)) ? current : undefined;
+    return (await this.isFile(current, directory)) ? current : undefined;
   }
 
-  private async isFile(filePath: string): Promise<boolean> {
+  /**
+   * Confirms `filePath` is a regular file AND, after resolving symlinks on
+   * both sides, still lives inside `directory` — a symlink placed under
+   * `directory` that points outside it must not be served.
+   */
+  private async isFile(filePath: string, directory: string): Promise<boolean> {
     try {
       const stats = await fs.stat(filePath);
-      return stats.isFile();
+
+      if (!stats.isFile()) {
+        return false;
+      }
+
+      const [realFile, realDirectory] = await Promise.all([
+        fs.realpath(filePath),
+        fs.realpath(directory),
+      ]);
+
+      const relative = path.relative(realDirectory, realFile);
+
+      return !relative.startsWith('..') && !path.isAbsolute(relative);
     } catch {
       return false;
     }

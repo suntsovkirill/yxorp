@@ -50,7 +50,7 @@ export function createServer(
   const server = new HttpServer(serverPipeline, logger);
 
   // 5. Attach proxy pipeline to proxyRes event
-  proxy.on('proxyRes', ((proxyRes: IncomingMessage, req: IncomingMessage, res: ServerResponse) => {
+  proxy.on('proxyRes', (proxyRes: IncomingMessage, req: IncomingMessage, res: ServerResponse) => {
     // proxy.execute() is async — an uncaught rejection here would otherwise
     // become an unhandled promise rejection and can crash the whole process,
     // leaving the client hanging with no response.
@@ -62,7 +62,7 @@ export function createServer(
         res.end();
       }
     });
-  }) as any);
+  });
 
   // 6. WebSocket upgrade handling
   server.addListener('upgrade', (req: IncomingMessage, socket: Duplex, head: Buffer) => {

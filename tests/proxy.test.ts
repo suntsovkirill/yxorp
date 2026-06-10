@@ -61,3 +61,21 @@ describe('Basic proxy', () => {
     expect(res.headers['x-custom-header']).toBe('from-target');
   });
 });
+
+describe('Unreachable target', () => {
+  let unreachableYxorp: { port: number; stop: () => Promise<void> };
+
+  beforeAll(async () => {
+    // Nothing listens on this port — connection attempts fail with ECONNREFUSED.
+    unreachableYxorp = await createYxorp({ target: 'http://127.0.0.1:1' });
+  });
+
+  afterAll(async () => {
+    await unreachableYxorp.stop();
+  });
+
+  it('responds with 502 instead of hanging', async () => {
+    const res = await fetchYxorp(unreachableYxorp.port, '/anything');
+    expect(res.statusCode).toBe(502);
+  });
+});

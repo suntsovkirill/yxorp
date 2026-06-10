@@ -58,3 +58,48 @@ describe('proxyHeaders', () => {
     }
   });
 });
+
+describe('Hop-by-hop response headers', () => {
+  let target: http.Server;
+  let targetPort: number;
+
+  beforeAll(async () => {
+    // Target that responds with hop-by-hop headers, plus a custom header
+    // dynamically named in the `Connection` header value.
+    target = http.createServer((_req, res) => {
+      res.writeHead(200, {
+        'content-type': 'application/json',
+        'connection': 'close, X-Removed-By-Connection',
+        'keep-alive': 'timeout=999',
+        'x-removed-by-connection': 'should-not-appear',
+        'x-keep': 'should-pass-through',
+      });
+      res.end(JSON.stringify({ ok: true }));
+    });
+
+    await new Promise<void>((resolve) => target.listen(0, resolve));
+    const addr = target.address() as any;
+    targetPort = addr.port;
+  });
+
+  afterAll(async () => {
+    target.close();
+  });
+
+  it('strips hop-by-hop headers and headers named in Connection', async () => {
+    const yxorp = await createYxorp({
+      target: `http://localhost:${targetPort}`,
+    });
+
+    try {
+      const res = await fetchYxorp(yxorp.port, '/api/test');
+      // yxorp's own server may emit its own Connection/Keep-Alive headers —
+      // what matters is the *target's* hop-by-hop values aren't forwarded.
+      expect(res.headers['keep-alive']).not.toBe('timeout=999');
+      expect(res.headers['x-removed-by-connection']).toBeUndefined();
+      expect(res.headers['x-keep']).toBe('should-pass-through');
+    } finally {
+      await yxorp.stop();
+    }
+  });
+});
