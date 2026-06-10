@@ -1,6 +1,6 @@
 {
   "name": "yxorp",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "description": "A local reverse proxy for rewriting, mocking, and debugging API responses.",
   "files": [
     "dist/",
