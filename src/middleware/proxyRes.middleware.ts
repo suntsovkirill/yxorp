@@ -2,7 +2,7 @@ import { IncomingMessage, ServerResponse } from 'http';
 import { Middleware } from '../services/pipeline.service';
 import { LoggerService } from '../services/logger.service';
 import { formatAccessLog } from '../utils/access-log';
-import { isHopByHopHeader } from '../utils/headers';
+import { forwardResponseHeaders } from '../utils/headers';
 
 export class ProxyResMiddleware implements Middleware<[proxyRes: IncomingMessage, req: IncomingMessage, res: ServerResponse]> {
   constructor(
@@ -14,10 +14,7 @@ export class ProxyResMiddleware implements Middleware<[proxyRes: IncomingMessage
     try {
       // Hop-by-hop headers (incl. transfer-encoding, since we reconstruct the
       // body with a known length) must not be forwarded to the client.
-      for (let key in proxyRes.headers) {
-        if (isHopByHopHeader(key, proxyRes.headers)) continue;
-        res.setHeader(key, proxyRes.headers[key] as any);
-      }
+      forwardResponseHeaders(proxyRes, res);
 
       res.statusCode = proxyRes.statusCode as number;
       res.statusMessage = proxyRes.statusMessage as string;

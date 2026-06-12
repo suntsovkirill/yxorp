@@ -1,4 +1,4 @@
-import { IncomingHttpHeaders } from 'http';
+import { IncomingHttpHeaders, IncomingMessage, ServerResponse } from 'http';
 
 const HOP_BY_HOP_HEADERS = new Set([
   'connection',
@@ -36,4 +36,17 @@ export function isHopByHopHeader(name: string, headers: IncomingHttpHeaders): bo
   }
 
   return false;
+}
+
+/**
+ * Copies every non-hop-by-hop header from the upstream response onto the client
+ * response. Shared by the streaming (`StreamMiddleware`) and buffered
+ * (`ProxyResMiddleware`) proxy paths so the hop-by-hop filtering lives in one
+ * place rather than being re-derived per copy loop.
+ */
+export function forwardResponseHeaders(proxyRes: IncomingMessage, res: ServerResponse): void {
+  for (const key in proxyRes.headers) {
+    if (isHopByHopHeader(key, proxyRes.headers)) continue;
+    res.setHeader(key, proxyRes.headers[key] as string | string[]);
+  }
 }

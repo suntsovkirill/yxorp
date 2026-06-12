@@ -1,8 +1,14 @@
 # Yxorp
 
+[![CI](https://github.com/suntsovkirill/yxorp/actions/workflows/ci.yml/badge.svg)](https://github.com/suntsovkirill/yxorp/actions/workflows/ci.yml)
+[![npm version](https://img.shields.io/npm/v/yxorp.svg)](https://www.npmjs.com/package/yxorp)
+[![license](https://img.shields.io/npm/l/yxorp.svg)](https://github.com/suntsovkirill/yxorp/blob/main/LICENSE)
+
 **Yxorp** is a local reverse proxy for rewriting, mocking, and debugging API responses. Think of it as a lightweight Swiss Army knife for HTTP(S) traffic — useful when you're developing a frontend against an API that's not quite ready, needs some data tweaking, or just returns the wrong thing.
 
 It sits between your app and a target server, and you get to decide what happens to every request and response.
+
+> **Pre-1.0 — expect change.** Yxorp is under active development. While the version is `0.x`, anything public-facing — the config schema, CLI flags, and mock/rewrite script signatures — may change between releases. Pin a version if you need stability; breaking changes are called out in the [CHANGELOG](CHANGELOG.md).
 
 ---
 
@@ -199,6 +205,8 @@ module.exports = (body, proxyRes, req, res) => {
 
 Whatever you return becomes the new response body.
 
+**Note:** rewriting buffers the entire response before sending it, so a route with a rewrite rule can't also stream — don't put one on an SSE feed or other long-lived streaming endpoint, or the response will never reach the client. See [Streaming & SSE](#streaming--sse).
+
 ---
 
 ### Remote Rules (`remoteRules`)
@@ -269,6 +277,18 @@ For more advanced patterns, see the [path-to-regexp documentation](https://githu
 Mock and rewrite scripts (`"script": "./path/to/file.js"`) are loaded with Node's `require()` and run with the same privileges as Yxorp itself — full filesystem, network, and process access, with no sandboxing.
 
 Only point Yxorp at config files (and the scripts they reference) that you trust, the same way you'd treat any other local Node script. Don't load a config from an untrusted source.
+
+---
+
+## Streaming & SSE
+
+Responses stream straight through to your client as they arrive from the target. Server-Sent Events (`text/event-stream`) and other long-lived chunked responses — like a streaming LLM API — reach your app incrementally, exactly as the upstream sends them, without being buffered in memory first.
+
+The one exception is a route with a matching **rewrite rule**. Rewriting needs the whole body at once — the script receives the complete response as a single buffer — so a rewritten route is buffered, not streamed. Everything else (plain proxying, remote routes) streams, with no configuration required.
+
+**Don't combine a rewrite rule with a streaming endpoint.** Because rewriting waits for the full body, a finite response just loses incremental delivery — but a never-ending stream (an open SSE feed or a long-poll) would be buffered forever and never reach the client. Per route, pick one: stream it, or rewrite it.
+
+In the access log, streamed responses show a `stream` label; buffered pass-through (and the rewrite path) show `proxy` and `rewrite` respectively — so you can see at a glance which path a request took.
 
 ---
 

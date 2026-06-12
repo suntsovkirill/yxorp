@@ -9,6 +9,7 @@ import { Config } from './config.service';
 import { LoggerService } from './logger.service';
 import { Pipeline } from './pipeline.service';
 import { BootstrapMiddleware } from '../middleware/bootstrap.middleware';
+import { StreamMiddleware } from '../middleware/stream.middleware';
 import { RawBodyMiddleware } from '../middleware/rawBody.middleware';
 import { ProxyResMiddleware } from '../middleware/proxyRes.middleware';
 import { RewriteMiddleware } from '../middleware/rewrite.middleware';
@@ -29,6 +30,7 @@ export function createServer(
   // 1. Proxy pipeline (outgoing responses) — no deps on proxy/server
   const proxyPipeline = new Pipeline<[proxyRes: IncomingMessage, req: IncomingMessage, res: ServerResponse]>();
   proxyPipeline.use(
+    new StreamMiddleware(logger),
     new RawBodyMiddleware(logger),
     new RewriteMiddleware(logger),
     new ProxyResMiddleware(logger),

@@ -2,11 +2,26 @@
   "name": "yxorp",
   "version": "0.2.4",
   "description": "A local reverse proxy for rewriting, mocking, and debugging API responses.",
+  "keywords": [
+    "reverse-proxy",
+    "proxy",
+    "http-proxy",
+    "mock",
+    "mock-server",
+    "api-mock",
+    "rewrite",
+    "http",
+    "api",
+    "debugging",
+    "cli",
+    "developer-tools"
+  ],
   "files": [
     "dist/",
     "bin/",
     "LICENSE",
-    "README.md"
+    "README.md",
+    "CHANGELOG.md"
   ],
   "main": "dist/index.js",
   "bin": {
@@ -15,12 +30,21 @@
   "scripts": {
     "start": "nodemon src/index.ts",
     "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
     "prepublishOnly": "npm run build",
     "test": "vitest run",
     "test:watch": "vitest"
   },
   "author": "Kirill Suntsov",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/suntsovkirill/yxorp.git"
+  },
+  "bugs": {
+    "url": "https://github.com/suntsovkirill/yxorp/issues"
+  },
+  "homepage": "https://github.com/suntsovkirill/yxorp#readme",
   "dependencies": {
     "http-encoding": "^2.2.0",
     "httpxy": "^0.5.3",
@@ -39,6 +63,6 @@
     "vitest": "^4.1.7"
   },
   "engines": {
-    "node": ">= 18"
+    "node": ">= 20"
   }
 }

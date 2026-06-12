@@ -14,8 +14,9 @@ StaticMiddleware → BootstrapMiddleware → MockMiddleware → ProxyMiddleware
 
 **Proxy Pipeline** (target response → client):
 ```
-RawBodyMiddleware → RewriteMiddleware → ProxyResMiddleware
+StreamMiddleware → RawBodyMiddleware → RewriteMiddleware → ProxyResMiddleware
 ```
+`StreamMiddleware` short-circuits the rest of the pipeline for responses with no rewrite rule (pipes them straight to the client); the `RawBody → Rewrite → ProxyRes` buffering path only runs when a rewrite rule is present.
 
 ### Key files
 - `src/index.ts` — entry point, config resolution, manual service wiring, hot-reload setup
@@ -66,7 +67,7 @@ The hot-reload test (`tests/config-watcher.test.ts`) uses soft assertions (`soft
 - Run: `npm test`
 
 ## Node engine
-Requires Node >= 18.
+Requires Node >= 20.
 
 ## Windows notes
 - `localAddress: '0.0.0.0'` causes `EINVAL` on Windows — don't use it
@@ -75,9 +76,9 @@ Requires Node >= 18.
 ## Key patterns
 - Middleware implement `Middleware<T>` with `use(...args, next)`
 - Pipeline awaits middleware return value — async middleware must return Promise
-- `RawBodyMiddleware` collects proxyRes body into `proxyRes.rawBody` before proceeding
-- `ProxyResMiddleware` strips `transfer-encoding` when setting `content-length`, and filters every other response header through `src/utils/headers.ts#isHopByHopHeader` before copying it to the client — drops RFC 2616 §13.5.1 hop-by-hop headers plus any header named in the target's `Connection` value. Use this helper for any other header-copying loop rather than re-deriving the hop-by-hop list
-- `req.startTime` is set in `HttpServer` on arrival; `src/utils/access-log.ts#formatAccessLog(label, statusCode, req)` builds the one-line access-log entry (label padded via `padEnd()`, elapsed ms from `src/utils/request-timing.ts#elapsedMs(req)`) — `StaticMiddleware`, `MockMiddleware`, `RewriteMiddleware`, and `ProxyResMiddleware` all use it so log lines line up regardless of which middleware handled the request. Each request gets exactly one log line — `RewriteMiddleware` sets `req.rewriteLogged = true` on every exit path (including its catch block) right before logging, and `ProxyResMiddleware` only logs plain pass-through when `!req.rewriteLogged`. Use this flag rather than `req.rewriteRule` truthiness — the rule can be set without a log line ever being emitted on an exception path
+- `StreamMiddleware` runs first in the proxy pipeline: when there's no `req.rewriteRule` it pipes `proxyRes` straight to the client and does **not** call `next()`, so SSE/chunked responses stream through and aren't held in memory. It returns a promise that resolves on `res`'s `'finish'`, and handles mid-stream upstream errors (502 if headers unsent, else `res.destroy()`) and client aborts (`proxyRes.destroy()`). Only when a rewrite rule is present does it fall through to `RawBodyMiddleware`, which collects the proxyRes body into `proxyRes.rawBody` (rewriting needs the whole body) before proceeding
+- `ProxyResMiddleware` (the buffered path) sets `content-length` from the reconstructed body; both it and `StreamMiddleware` forward response headers via `src/utils/headers.ts#forwardResponseHeaders`, which filters every header through `isHopByHopHeader` — dropping RFC 2616 §13.5.1 hop-by-hop headers (incl. `transfer-encoding`) plus any header named in the target's `Connection` value. Use `forwardResponseHeaders` (or `isHopByHopHeader`) for any other header-copying loop rather than re-deriving the hop-by-hop list
+- `req.startTime` is set in `HttpServer` on arrival; `src/utils/access-log.ts#formatAccessLog(label, statusCode, req)` builds the one-line access-log entry (label padded via `padEnd()`, elapsed ms from `src/utils/request-timing.ts#elapsedMs(req)`) — `StaticMiddleware`, `MockMiddleware`, `RewriteMiddleware`, `StreamMiddleware`, and `ProxyResMiddleware` all use it so log lines line up regardless of which middleware handled the request. Each request gets exactly one log line — streamed pass-through is logged by `StreamMiddleware` (label `stream`, on `res`'s `'finish'`), `RewriteMiddleware` sets `req.rewriteLogged = true` on every exit path (including its catch block) right before logging, and `ProxyResMiddleware` only logs its (now rare, buffered-fallback) pass-through when `!req.rewriteLogged`. Use this flag rather than `req.rewriteRule` truthiness — the rule can be set without a log line ever being emitted on an exception path
 - `MockRulesMatcher`/`RewriteRulesMatcher` extend the shared `MethodPathRulesMatcher<T>` base (`src/services/rules-matchers/method-path-rules-matcher.ts`), which only requires `getRules()`. Use `matchWithParams(url, method)` to get the matched rule and its decoded path params in a single pass — `match()` + `params()` back to back would compile/run `path-to-regexp` twice for the same lookup
 - Anything that calls into `path-to-regexp`'s `match()` with a user-supplied path pattern (config rules) must be wrapped in try/catch — malformed patterns throw synchronously (e.g. `match('/api/:[bad')` throws `Missing parameter name`)
 - Pipeline execution and `httpProxy.web()` calls return promises that must be awaited or `.catch()`-handled — an uncaught rejection here crashes the process. `HttpServer`, `ProxyMiddleware`, and `yxorp-server.service.ts`'s `upgrade` handler all guard against this and respond with a `502` if headers haven't been sent yet
