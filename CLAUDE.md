@@ -9,8 +9,9 @@ Yxorp is a local reverse proxy for rewriting, mocking, and debugging API respons
 
 **Server Pipeline** (incoming requests → target):
 ```
-[CaptureMiddleware] → CorsMiddleware → StaticMiddleware → BootstrapMiddleware → MockMiddleware → ProxyMiddleware
+[CaptureMiddleware] → CorsMiddleware → ChaosMiddleware → StaticMiddleware → BootstrapMiddleware → MockMiddleware → RequestRewriteMiddleware → ProxyMiddleware
 ```
+`BootstrapMiddleware` picks the mock/rewrite/request rules (setting `req.mockRule`/`rewriteRule`/`requestRule`). When any enabled rule has `match.body`, it first reads the request body (`req.proxyBody`, parsed into `req.parsedBody`); `ProxyMiddleware` then pipes `req.proxyBody` to the target via httpxy's `buffer` option (the stream is drained), and `req.json()` reuses it. `RequestRewriteMiddleware` applies `req.requestRule` (headers/query/body; keeps `req.originalUrl` for logs and capture).
 `CaptureMiddleware` is only added when `createServer(..., { capture: [...] })` gets listeners (`--har`/`--record`). It observes without changing anything: it wraps `req.emit` to see request `'data'` chunks as whoever reads the stream consumes them (never reading it itself — that would steal data from httpxy's pipe or a mock script), wraps `res.write`/`end`/`writeHead`, and emits a `CapturedExchange` on `'finish'` via `setImmediate` (so later `'finish'` handlers such as `StreamMiddleware`'s log/`handledBy` run first). `CorsMiddleware` answers preflights itself and sets CORS headers on `res` up front; `forwardResponseHeaders` then skips the target's `access-control-*` headers and merges `Vary`.
 
 **Proxy Pipeline** (target response → client):
@@ -20,7 +21,9 @@ StreamMiddleware → RawBodyMiddleware → RewriteMiddleware → ProxyResMiddlew
 `StreamMiddleware` short-circuits the rest of the pipeline for responses with no rewrite rule (pipes them straight to the client); the `RawBody → Rewrite → ProxyRes` buffering path only runs when a rewrite rule is present.
 
 ### Key files
-- `src/index.ts` — entry point, config resolution, manual service wiring, hot-reload setup
+- `src/index.ts` — library entry (`startYxorp`, `YxorpConfigError`, `validateConfig`, types); must stay free of side effects
+- `src/cli.ts` — the `yxorp` command (`bin/yxorp.js` → `dist/cli.js`): flags, `init`/`openapi` commands, signals; a thin wrapper over `startYxorp`
+- `src/app.ts` — `startYxorp(options)`: load/validate config, wire everything, listen, watch, start the UI
 - `src/services/yxorp-server.service.ts` — `createServer()` wires both pipelines
 - `src/services/pipeline.service.ts` — generic `Pipeline<T>` with `use()`/`execute()`
 - `src/services/config-resolver.ts` — config file lookup logic; returns `configPath` alongside `configDir`
@@ -35,15 +38,20 @@ StreamMiddleware → RawBodyMiddleware → RewriteMiddleware → ProxyResMiddlew
 - `src/services/script-loader.ts` — `loadScript(path)` for mock/rewrite scripts (see Script system)
 - `src/services/har-writer.ts` / `src/services/recorder.ts` — capture listeners behind `--har` / `--record`
 - `src/services/init-config.ts` — `yxorp init`
+- `src/services/openapi-mocks.ts` — `yxorp openapi`: OpenAPI 3 / Swagger 2 → mock rules
+- `src/services/config-loader.ts` — `loadConfigFile(path, overrides?)`: reads the config, merges `include`d files, and returns the files involved, include patterns, and each rule's source (file + index). `overrides` lets the UI validate an edit before writing it
+- `src/services/proxy-config.ts#applyProfile` — puts the active profile's rules before the base rules
+- `src/ui/` — web UI backend: `ui-server.ts` (HTTP API + SSE + static files from `ui/`), `config-editor.ts` (validated, atomic, indentation-preserving edits limited to the config's files and rule paths), `traffic-log.ts` (ring buffer fed by capture), `json-file.ts`
+- `ui/` — the web UI frontend (plain JS, no build; shipped in the package). Render untrusted data only via `textContent` (the `h()` helper) — never `innerHTML`; the CSP forbids inline scripts/styles
 - `schema.json` — JSON Schema for the config (shipped in the package). `tests/schema.test.ts` checks it knows exactly the validator's keys and accepts/rejects the same configs — update both when adding a config field
 
 ### Dependency injection
-No DI container. Everything is manually composed in `index.ts`:
+No DI container. Everything is manually composed in `src/app.ts#startYxorp`:
 ```typescript
 const logger = new LoggerService();
 const appConfig = new Config();
 appConfig.set(proxyConfig);
-const { listen } = createServer(appConfig, logger, rewriteMatcher, mockMatcher, remoteMatcher, { capture });
+const { server, store } = createServer(appConfig, logger, rewriteMatcher, mockMatcher, remoteMatcher, { capture });
 ```
 
 ### HTTP proxying
@@ -65,8 +73,13 @@ Mock scripts also get `await req.json()/text()/buffer()` (`src/utils/request-bod
 ## Config resolution
 Order: `--config <path>` → `./yxorp.json` → `./.yxorp/settings.json`
 
+Every relative path in the config (rule files, scripts, static directories, TLS files, includes) resolves against the config's directory — `YxorpConfig.configDir`, set by `buildProxyConfig(cfg, configDir)`. Use `path.resolve(config.get().configDir, p)`, never bare `path.resolve(p)`: the library API doesn't `chdir`.
+
+## Web UI security
+The UI server (`src/ui/ui-server.ts`) can rewrite the config, which can point at scripts — so it binds `127.0.0.1` only, every `/api` call needs the per-run token (header `x-yxorp-token`; `?token=` only for the SSE endpoint, since `EventSource` can't set headers), the `Host` header must be a loopback name (DNS rebinding), no CORS headers are ever sent, and `ConfigEditor` only writes files that are part of the loaded config and only at rule paths. Keep all of these when adding endpoints.
+
 ## Config hot-reload
-`watchConfig` in `src/services/config-watcher.ts` watches the config file's *parent directory* via `fs.watch` (filtering events by filename) with a 100ms debounce — watching the file directly misses atomic-rename saves (editors that write a temp file then rename it over the original swap the inode, after which a direct file watch stops firing). On change it re-reads and parses the file, then calls `onReload(newConfig)` (built by `createConfigReloadHandler`, which runs the same CLI-override → validate steps as startup). Since all matchers and middlewares call `config.get()` per request, calling `appConfig.set()` in `onReload` takes effect immediately with no server restart.
+`watchConfig` in `src/services/config-watcher.ts` watches the *parent directories* of the config and every included file (plus the directories of include wildcards) via `fs.watch` (filtering events by filename) with a 100ms debounce — watching the file directly misses atomic-rename saves (editors that write a temp file then rename it over the original swap the inode, after which a direct file watch stops firing). On change it re-reads and parses the file, then calls `onReload(newConfig)` (built by `createConfigReloadHandler`, which runs the same CLI-override → validate steps as startup). Since all matchers and middlewares call `config.get()` per request, calling `appConfig.set()` in `onReload` takes effect immediately with no server restart.
 
 The hot-reload test (`tests/config-watcher.test.ts`) uses soft assertions (`softExpect`) — failures print a `console.warn` but don't fail the build, because `fs.watch` can be unreliable on some platforms.
 
@@ -76,7 +89,8 @@ The hot-reload test (`tests/config-watcher.test.ts`) uses soft assertions (`soft
 - Test helpers: `tests/helpers/create-yxorp.ts`, `tests/helpers/target-server.ts`
 - Fixtures in `tests/fixtures/`
 - Run: `npm test`; `npm run test:coverage` (thresholds in `vitest.config.ts`, run in CI); `npm run lint` (ESLint flat config, `eslint.config.mjs`)
-- `src/index.ts` only runs in child processes (`tests/cli.test.ts`, via `tsx`), so it doesn't count toward coverage
+- `src/cli.ts` only runs in child processes (`tests/cli.test.ts`, via `tsx`), so it doesn't count toward coverage; test behavior through `startYxorp` (`tests/app.test.ts`) where possible
+- Node's HTTP client doesn't chunk `DELETE` bodies — set `content-length` when sending one in tests (see `tests/ui-server.test.ts`)
 
 ## Node engine
 Requires Node `^20.19.0 || >=22.12.0`: `httpxy` is ESM-only and the CommonJS build loads it with `require()`, which needs unflagged `require(esm)`.

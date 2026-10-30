@@ -8,7 +8,7 @@ export default defineConfig({
       exclude: ['src/types/**'],
       reporter: ['text-summary', 'text', 'html'],
       // A floor against regressions, a little below the current numbers —
-      // src/index.ts runs in a child process in the CLI tests, so it never counts.
+      // src/cli.ts runs in a child process in the CLI tests, so it never counts.
       thresholds: {
         statements: 75,
         branches: 70,

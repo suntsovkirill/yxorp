@@ -9,6 +9,43 @@ config schema, CLI flags, or mock/rewrite script API.
 
 ## [Unreleased]
 
+### Added — web UI and more
+- **Web UI** (`--ui [port]`, `"ui"`): live traffic with decoded details,
+  one-click "mock this response", replay (as-is or edited), copy as cURL,
+  rule management across the config and its includes (toggle, reorder, edit,
+  delete, add — also in profiles), profile switching, store reset, and a raw
+  config editor. Edits are validated against the whole config before an
+  atomic write. Listens on 127.0.0.1 only and requires a per-run token.
+- **`include`**: merge rule lists from other files (wildcards in file names);
+  included files are watched too.
+- **Profiles** (`"profiles"`, `"profile"`, `--profile`): named rule sets (and
+  chaos) switched on as a whole; their rules go before the base rules.
+- **`chaos`**: inject latency, errors and dropped connections, optionally
+  for some paths only.
+- **`requestRules`**: set or remove request headers and query params, or
+  replace the request body, before proxying.
+- **`match.body`**: match mock/rewrite/request rules on fields of the JSON
+  request body — e.g. GraphQL `operationName`.
+- **Stateful scripts**: mock and rewrite scripts get a `ctx` argument with a
+  shared `store` (`Map`), `params` and `query`.
+- **`yxorp openapi <spec>`**: generate mock rules from an OpenAPI 3 or
+  Swagger 2 spec (JSON or YAML).
+- **Programmatic API**: `require('yxorp')` exports `startYxorp()`,
+  `YxorpConfigError`, `validateConfig()` and the config types.
+- **`host`** option and `--host`.
+
+### Changed — web UI and more
+- **Yxorp listens on `127.0.0.1` by default** (was: all interfaces), so the
+  proxy — and the files and scripts behind it — aren't reachable from other
+  machines. Set `"host": "0.0.0.0"` (or `--host 0.0.0.0`) for the old
+  behavior.
+- The package's `main` is now the library entry and has no side effects;
+  the CLI moved to `dist/cli.js` (the `yxorp` command is unchanged).
+- Relative paths in the config resolve against the config's directory
+  directly, rather than through `process.chdir()` (the CLI still changes
+  into the config directory for scripts that rely on it).
+- A config reload that changes nothing is skipped.
+
 ### Fixed
 - Mock, rewrite, and remote rules now match the URL path only, so a request
   with a query string (`/api/users?page=2`) no longer misses its rule, and the

@@ -48,9 +48,9 @@ The `$schema` line gives you autocompletion and inline validation in VS Code and
 yxorp
 ```
 
-That's it. Yxorp starts on `http://localhost:3000` and proxies everything to `https://api.example.com`. Open your app, point it at `http://localhost:3000`, and watch the traffic flow.
+That's it. Yxorp starts on `http://127.0.0.1:3000` and proxies everything to `https://api.example.com`. Open your app, point it at `http://localhost:3000`, and watch the traffic flow.
 
-Now the fun part — start adding rules.
+Now the fun part — start adding rules. Or run `yxorp --ui` and do it from the browser: watch requests live, turn any response into a mock with one click, and switch rules on and off — see [Web UI](#web-ui).
 
 ---
 
@@ -78,7 +78,7 @@ my-project/
 
 ### CLI overrides
 
-`--port` and `--target` override the corresponding config values without touching the file — handy for one-off runs or scripting:
+`--port`, `--target`, `--host` and `--profile` override the corresponding config values without touching the file — handy for one-off runs or scripting:
 
 ```bash
 yxorp --port 4000 --target http://localhost:8080
@@ -91,6 +91,9 @@ yxorp --port 4000 --target http://localhost:8080
 | `--config <path>` | Config file to use |
 | `--port <port>` | Override `proxyPort` |
 | `--target <url>` | Override `target` |
+| `--host <host>` | Override `host` — e.g. `0.0.0.0` to accept other devices |
+| `--profile <name>` | Activate a [profile](#profiles) |
+| `--ui [port]` | Start the [web UI](#web-ui) on `http://127.0.0.1:<port>` (default 4040) |
 | `--quiet` | Log only warnings and errors |
 | `--verbose` | Also log debug details: which rule matched, where a request was routed, error stacks |
 | `--har <file>` | Save all traffic to a HAR file — see [Recording traffic](#recording-traffic) |
@@ -98,7 +101,12 @@ yxorp --port 4000 --target http://localhost:8080
 | `-v`, `--version` | Print the version |
 | `-h`, `--help` | Print help |
 
-`yxorp init [--target <url>] [--port <port>]` creates a starter `yxorp.json` (with `$schema`) in the current directory.
+Commands:
+
+| Command | Description |
+|---------|-------------|
+| `yxorp init [--target <url>] [--port <port>]` | Create a starter `yxorp.json` (with `$schema`) in the current directory |
+| `yxorp openapi <spec> [--out <file>] [--base-path <path>]` | Generate mock rules from an OpenAPI spec — see [OpenAPI](#generating-mocks-from-openapi) |
 
 ### Config validation
 
@@ -124,6 +132,14 @@ Port for the local proxy server.
 
 ```json
 "proxyPort": 8080
+```
+
+### `host`
+
+Network interface to listen on. Default: `127.0.0.1` — only this machine can reach the proxy (and the static files and mock scripts behind it). Set `"0.0.0.0"` to let other devices in, e.g. a phone or a VM on your network.
+
+```json
+"host": "0.0.0.0"
 ```
 
 ### `proxyHeaders`
@@ -199,7 +215,65 @@ mkcert localhost
 }
 ```
 
-Changing `https` (like `proxyPort`) needs a restart.
+Changing `https` (like `proxyPort` and `host`) needs a restart.
+
+### `include`
+
+Pull rules in from other files — keep a long config manageable, or use the output of [`--record`](#record-mode) and [`yxorp openapi`](#generating-mocks-from-openapi) directly:
+
+```json
+"include": ["./recorded/recorded.json", "./mocks/*.json"]
+```
+
+Included files contain only rule lists (`mockRules`, `rewriteRules`, `requestRules`, `remoteRules`, `staticRules`). Their rules come after the config's own (which therefore win), in `include` order; a wildcard (`*`, `?` — in the file name only) expands in name order. All paths — in `include` and inside the included files — are relative to the main config's directory. Editing an included file, or adding one that matches a wildcard, reloads the config like editing the config itself.
+
+### Profiles
+
+Named sets of rules you can switch on as a whole — "empty state", "everything fails", "new API version":
+
+```json
+"profiles": {
+  "empty": {
+    "mockRules": [
+      { "method": "GET", "path": "/api/orders", "json": [] },
+      { "method": "GET", "path": "/api/notifications", "json": [] }
+    ]
+  },
+  "flaky": {
+    "chaos": { "errorRate": 0.3, "delay": { "min": 200, "max": 3000 } }
+  }
+},
+"profile": "empty"
+```
+
+Activate one with `"profile"` (hot-reloaded), `--profile <name>`, or the [web UI](#web-ui). The active profile's rules go **before** the base rules, so they win; its `chaos`, if any, replaces the base one. A profile can contain any rule list plus `chaos`.
+
+### `chaos`
+
+Fault injection, to see how your app copes with a bad network or a struggling backend:
+
+```json
+"chaos": {
+  "delay": { "min": 200, "max": 2000 },
+  "errorRate": 0.1,
+  "errorStatus": 503,
+  "dropRate": 0.02,
+  "paths": ["/api/*rest"]
+}
+```
+
+| Option | Description |
+|--------|-------------|
+| `delay` | Extra latency in ms — a number, or `{ "min", "max" }` for a random one |
+| `errorRate` | Share of requests (0–1) answered with `errorStatus` (default `503`) instead |
+| `dropRate` | Share of requests (0–1) whose connection is dropped with no response |
+| `paths` | Only affect these path patterns (default: everything) |
+
+Chaos applies before anything else — static files, mocks and proxied requests alike — and is logged with a `chaos` label.
+
+### `ui`
+
+Start the [web UI](#web-ui) with the proxy: `true`, or `{ "port": 4040 }`.
 
 ---
 
@@ -276,6 +350,26 @@ module.exports = async (req, res) => {
 
 The body is only read when you call one of these, so a script that reads the request stream itself (`req.on('data', ...)`) keeps working.
 
+A third argument, `ctx`, carries state shared by all scripts — `ctx.store`, a `Map` that lives as long as the proxy (script edits don't reset it; the web UI can) — plus `ctx.params` and `ctx.query`. That's enough for a working CRUD mock:
+
+```javascript
+// ./mock/todos.js — used for both GET and POST /api/todos
+module.exports = async (req, res, ctx) => {
+  const todos = ctx.store.get('todos') ?? [];
+
+  if (req.method === 'POST') {
+    const todo = { id: todos.length + 1, ...(await req.json()) };
+    ctx.store.set('todos', [...todos, todo]);
+    res.statusCode = 201;
+    return res.end(JSON.stringify(todo));
+  }
+
+  res.end(JSON.stringify(todos));
+};
+```
+
+Rewrite scripts get the same `ctx` as a fifth argument.
+
 Scripts can be CommonJS (`module.exports = ...`), ES modules (`export default ...` in a `.mjs` file, or `.js` in a `"type": "module"` package), or TypeScript (`.ts` — on Node.js 22.18+, which runs TypeScript natively).
 
 This mirrors how a real backend works on purpose — mock scripts are meant to **stand in for the target server**, so the same rules apply: you decide what the client receives, down to the last header.
@@ -291,7 +385,7 @@ These work on every mock rule (and on rewrite rules):
 | `statusCode` | Response status (for scripts: the default, which the script can change) |
 | `headers` | Response headers, e.g. `{ "x-total-count": "42" }` — win over the defaults above |
 | `delay` | Milliseconds to wait before responding — simulate a slow backend, test your loading states |
-| `match` | Extra conditions on the query string and request headers — see below |
+| `match` | Extra conditions on the query string, request headers and JSON body — see below |
 | `disable` | Skip this rule |
 
 ```json
@@ -304,7 +398,7 @@ These work on every mock rule (and on rewrite rules):
 }
 ```
 
-#### Match on query and headers
+#### Match on query, headers and body
 
 By default a rule matches on method and path alone. `match` narrows it down: every listed query param and request header must be present with exactly that value (header names are case-insensitive). Rules are checked top to bottom and the first match wins, so put the most specific ones first:
 
@@ -315,6 +409,17 @@ By default a rule matches on method and path alone. `match` narrows it down: eve
   { "method": "GET", "path": "/api/me", "file": "./mock/user.json" }
 ]
 ```
+
+`match.body` checks the JSON request body: every field listed must be there with an equal value (nested objects are compared the same way; extra fields are fine). That's what makes **GraphQL** mockable — every query goes to the same `/graphql`, but the operation name tells them apart:
+
+```json
+"mockRules": [
+  { "method": "POST", "path": "/graphql", "match": { "body": { "operationName": "GetUser", "variables": { "id": "1" } } }, "file": "./mock/user-1.json" },
+  { "method": "POST", "path": "/graphql", "match": { "body": { "operationName": "GetUser" } }, "file": "./mock/user.json" }
+]
+```
+
+Other operations are proxied as usual, body intact. (When any rule uses `match.body`, the request body is read before matching. Mock scripts should then use `req.json()`/`req.text()` rather than reading the request stream themselves.)
 
 #### Disable a rule:
 
@@ -381,6 +486,26 @@ Whatever you return becomes the new response body:
 If the script doesn't export a function, or throws, the error is logged and the original response is passed through unchanged.
 
 **Note:** rewriting buffers the entire response before sending it, so a route with a rewrite rule can't also stream — don't put one on an SSE feed or other long-lived streaming endpoint, or the response will never reach the client. See [Streaming & SSE](#streaming--sse).
+
+---
+
+### Request Rules (`requestRules`)
+
+Change requests **on their way to the target** — add an auth header the app doesn't send yet, strip a cookie, force a query flag, or replace the body:
+
+```json
+"requestRules": [
+  {
+    "method": "GET",
+    "path": "/api/*rest",
+    "headers": { "authorization": "Bearer dev-token", "cookie": null },
+    "query": { "debug": "1", "tracking": null }
+  },
+  { "method": "POST", "path": "/api/orders", "json": { "items": [], "coupon": "TEST" } }
+]
+```
+
+`headers` and `query` set values, and remove them with `null`. `json` or `body` replace the request body (`content-length` is fixed up; `json` also sets `content-type`). `match` works as for mock rules. Logs and the web UI show the URL the client actually requested. Mocked requests never reach the target, so request rules don't apply to them.
 
 ---
 
@@ -519,6 +644,71 @@ Both flags capture bodies up to 10 MB per request; anything longer is cut off (a
 
 ---
 
+## Web UI
+
+```bash
+yxorp --ui          # http://127.0.0.1:4040
+yxorp --ui 5050     # another port
+```
+
+or `"ui": true` in the config. The UI runs next to the proxy and gives you:
+
+- **Traffic** — every request live, with decoded headers and bodies, filtering, and which part of yxorp answered it (`stream`/`proxy` = the target, `mock`, `rewrite`, `static`, `cors`, `chaos`).
+- **Mock this response** — one click turns any response into a mock rule (editable status, content type and body; optionally only for that query string). It goes to the top of `mockRules` and takes over immediately.
+- **Replay** a request as-is, or edit method, path, headers and body first; **copy as cURL**.
+- **Rules** — every rule from the config and its includes, with on/off switches, reordering, editing, deleting and adding (also within profiles).
+- **Profiles** — switch the active profile from the header.
+- **Store** — see and reset the state mock scripts keep in `ctx.store`.
+- **Config** — edit the raw config file.
+
+Every change is validated against the whole config before it's written; an invalid edit is rejected with the errors and the file stays untouched. Changes are written to the files they belong to (an included file's rule is edited in that file), keeping their indentation, and apply right away.
+
+The UI only listens on `127.0.0.1`, and its API requires a random token that's embedded in the page each run — another website open in your browser can't read or change anything through it.
+
+---
+
+## Generating mocks from OpenAPI
+
+Have an OpenAPI (3.x) or Swagger (2.0) spec for an API that isn't built yet? Turn it into mocks:
+
+```bash
+yxorp openapi ./openapi.yaml --out ./mocks/api.json
+```
+
+```json
+"include": ["./mocks/api.json"]
+```
+
+Every operation becomes a mock rule answering with its success response (lowest `2xx`, else `default`): the response's example if it has one, otherwise a sample built from its schema (`$ref`s, `allOf`/`oneOf`, enums, defaults and formats like `date-time` or `email` are taken into account). `{param}` path segments become `:param`, and the path of the first server URL (or Swagger's `basePath`) is prefixed — override it with `--base-path` (`--base-path /` for none). Operations it can't mock (binary-only or no success response) are listed. JSON and YAML specs both work.
+
+Since the generated file is meant to be included, regenerate it whenever the spec changes; keep your hand-written tweaks in the main config, where they win.
+
+---
+
+## Using yxorp from code
+
+`require('yxorp')` gives you the proxy as a library — handy in integration tests:
+
+```javascript
+const { startYxorp } = require('yxorp');
+
+const proxy = await startYxorp({
+  config: {
+    target: 'https://api.example.com',
+    proxyPort: 0, // any free port
+    mockRules: [{ method: 'GET', path: '/api/flags', json: { newCheckout: true } }],
+  },
+});
+
+// point the app under test at proxy.url ...
+
+await proxy.close();
+```
+
+Options: `configPath` (load, validate and watch a config file) or `config` (an object; relative paths resolve against `configDir`, default the current directory), plus `argv` (CLI-style overrides), `logger`, `har`, `record` and `ui`. The result has `url`, `port`, `config` (live), `store` (`ctx.store`), `uiUrl` and `close()`. An invalid config rejects with a `YxorpConfigError` listing every problem.
+
+---
+
 ## Full Example
 
 Here's a complete config showing all features in action:
@@ -583,11 +773,11 @@ Here's a complete config showing all features in action:
 
 ### Config
 
-Yxorp watches its config file at runtime. **Save the file — changes take effect on the next request.** No restart needed.
+Yxorp watches its config file — and every file it [includes](#include) — at runtime. **Save the file — changes take effect on the next request.** No restart needed.
 
 This works for all config fields: mock rules, rewrite rules, remote rules, static rules, and headers. The proxy server keeps running and the new config is applied immediately.
 
-`--port`/`--target` CLI overrides keep winning over the file after every reload. The fields that can't change at runtime are `proxyPort` and `https`: Yxorp logs a warning and keeps the current port and protocol until you restart it.
+`--port`/`--target` CLI overrides keep winning over the file after every reload. The fields that can't change at runtime are `proxyPort`, `host`, `https` and `ui`: Yxorp logs a warning (for the first three) and keeps the current values until you restart it.
 
 ### Scripts
 
@@ -602,8 +792,8 @@ This is especially handy during development when you're iterating on API respons
 ## Development
 
 ```bash
-# Run from source with auto-restart on changes (tsx)
-npm start
+# Run from source with auto-restart on changes (tsx); pass flags after --
+npm start -- --ui
 
 # Run tests (integration tests spin up real servers)
 npm test
