@@ -25,9 +25,20 @@ export class Pipeline<T extends any[]> {
         return;
       }
 
+      // Keep hold of the downstream promise and await it here as well — a
+      // middleware that calls `next()` without returning/awaiting it would
+      // otherwise drop a downstream rejection on the floor (an unhandled
+      // rejection that crashes the process, with the client left hanging).
+      let downstream: Promise<void> | undefined;
+
       await middleware.use(...args, () => {
-        return runner(index + 1);
+        downstream = runner(index + 1);
+        return downstream;
       });
+
+      if (downstream) {
+        await downstream;
+      }
     }
 
     await runner(0);

@@ -73,17 +73,25 @@ my-project/
 yxorp --port 4000 --target http://localhost:8080
 ```
 
+Run `yxorp --help` for the full list of flags.
+
+### Config validation
+
+The config is checked at startup and on every hot-reload. Invalid values (a `target` that isn't an absolute `http(s)` URL, an unknown HTTP `method`, a `statusCode` outside 100–599, a malformed `path` pattern…) stop Yxorp from starting — or, on reload, keep the previous config — with a message pointing at the offending field. Unknown keys (usually typos like `mockRule` or `statuscode`) are reported as warnings.
+
 ---
 
 ## Config Reference
 
 ### `target` (required)
 
-The upstream server everything proxies to by default.
+The upstream server everything proxies to by default — an absolute `http://` or `https://` URL.
 
 ```json
 "target": "https://api.example.com"
 ```
+
+If the target can't be reached, the client gets a `502` with a plain-text explanation, e.g. `yxorp: cannot reach http://localhost:8080: ECONNREFUSED`.
 
 ### `proxyPort` (required)
 
@@ -105,6 +113,23 @@ Extra HTTP headers to send with every proxied request to the target server. Usef
     "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
     "origin": "https://example.com"
   }
+}
+```
+
+### `changeOrigin`
+
+Rewrite the `Host` header of proxied requests to the target's host. Default: `true`. Set to `false` to forward the client's original `Host` header.
+
+### `secure`
+
+Verify the target's TLS certificate. Default: `false`, so targets with self-signed certificates work out of the box. Set to `true` to reject invalid certificates.
+
+```json
+{
+  "target": "https://api.example.com",
+  "proxyPort": 3000,
+  "changeOrigin": false,
+  "secure": true
 }
 ```
 
@@ -203,7 +228,16 @@ module.exports = (body, proxyRes, req, res) => {
 };
 ```
 
-Whatever you return becomes the new response body.
+Whatever you return becomes the new response body:
+
+| Return value | Body |
+|--------------|------|
+| `Buffer` / `Uint8Array` | sent as is |
+| string | sent as UTF-8 |
+| object, array, number… | JSON-serialized |
+| `undefined` / `null` | original body kept (a warning is logged — usually a forgotten `return`) |
+
+If the script doesn't export a function, or throws, the error is logged and the original response is passed through unchanged.
 
 **Note:** rewriting buffers the entire response before sending it, so a route with a rewrite rule can't also stream — don't put one on an SSE feed or other long-lived streaming endpoint, or the response will never reach the client. See [Streaming & SSE](#streaming--sse).
 
@@ -233,9 +267,9 @@ How the request path is built depends on whether `target` has a path:
 | `/legacy/:id` | `http://localhost:4000/v2/items/:id` | `/legacy/5?page=2` | `http://localhost:4000/v2/items/5?page=2` — the path is rebuilt from the params |
 | `/legacy/*rest` | `http://localhost:4000/v2/*rest` | `/legacy/a/b` | `http://localhost:4000/v2/a/b` |
 
-The request's query string is always carried over (and appended to any query string in `target`).
+The request's query string is always carried over (and appended to any query string in `target`). `target` must be an absolute URL (`http`, `https`, `ws` or `wss`).
 
-The `ws` option enables WebSocket proxying for that route.
+The `ws` option enables WebSocket proxying for that route. Each WebSocket connection gets one access-log line with a `ws` label when it closes — `101` if the upstream accepted the upgrade, the upstream's status if it refused, or `502` if it couldn't be reached.
 
 ---
 

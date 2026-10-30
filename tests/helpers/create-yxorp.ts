@@ -21,14 +21,36 @@ function createSilentLogger(): LoggerService {
   return logger;
 }
 
-export async function createYxorp(configFile: Partial<ConfigFile> & { target: string }): Promise<YxorpInstance> {
-  const logger = createSilentLogger();
+/**
+ * Logger that records every message instead of printing it — for asserting on
+ * access-log lines and errors.
+ */
+export function createRecordingLogger(): { logger: LoggerService; messages: { level: string; message: string }[] } {
+  const logger = new LoggerService();
+  const messages: { level: string; message: string }[] = [];
+
+  for (const level of ['info', 'error', 'warn', 'debug'] as const) {
+    logger[level] = ((message: unknown) => {
+      messages.push({ level, message: message instanceof Error ? message.message : String(message) });
+    }) as any;
+  }
+
+  return { logger, messages };
+}
+
+export async function createYxorp(
+  configFile: Partial<ConfigFile> & { target: string },
+  options?: { logger?: LoggerService },
+): Promise<YxorpInstance> {
+  const logger = options?.logger ?? createSilentLogger();
 
   const appConfig = new Config();
   appConfig.set(buildProxyConfig({
     target: configFile.target,
     proxyPort: configFile.proxyPort || 0,
     proxyHeaders: configFile.proxyHeaders,
+    secure: configFile.secure,
+    changeOrigin: configFile.changeOrigin,
     mockRules: configFile.mockRules || [],
     rewriteRules: configFile.rewriteRules || [],
     staticRules: configFile.staticRules || [],

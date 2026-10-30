@@ -9,10 +9,29 @@ import { createServer } from './services/yxorp-server.service';
 import { ConfigFile } from './types/yxorp-config';
 import { resolveConfig } from './services/config-resolver';
 import { watchConfig } from './services/config-watcher';
-import { validateConfig } from './services/config-validator';
+import { findConfigWarnings, validateConfig } from './services/config-validator';
 import { applyCliOverrides } from './services/cli-overrides';
 import { buildProxyConfig } from './services/proxy-config';
 import { createConfigReloadHandler } from './services/config-reload';
+
+// --- Help flag ---
+const HELP = `Usage: yxorp [options]
+
+A local reverse proxy for rewriting, mocking, and debugging API responses.
+
+Options:
+  --config <path>    Config file (default: ./yxorp.json, then ./.yxorp/settings.json)
+  --port <port>      Override "proxyPort" from the config
+  --target <url>     Override "target" from the config
+  -v, --version      Print the version
+  -h, --help         Print this help
+
+Docs: https://github.com/suntsovkirill/yxorp#readme`;
+
+if (process.argv.includes('--help') || process.argv.includes('-h')) {
+  console.log(HELP);
+  process.exit(0);
+}
 
 // --- Version flag ---
 if (process.argv.includes('--version') || process.argv.includes('-v')) {
@@ -47,6 +66,8 @@ if (configErrors.length) {
   configErrors.forEach(err => console.error(`  - ${err}`));
   process.exit(1);
 }
+
+findConfigWarnings(config).forEach(warning => console.warn(`Warning: ${warning}`));
 
 // Change CWD to config directory so relative paths in config work correctly
 if (configDir !== process.cwd()) {

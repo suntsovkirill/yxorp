@@ -1,6 +1,7 @@
 import http, { IncomingMessage, Server, ServerResponse } from 'http';
 import { Pipeline } from './pipeline.service';
 import { LoggerService } from './logger.service';
+import { describeError, sendErrorResponse } from '../utils/error-response';
 
 export class HttpServer {
   public readonly use: Pipeline<[IncomingMessage, ServerResponse]>['use'];
@@ -24,11 +25,7 @@ export class HttpServer {
       // unhandled promise rejection and can crash the whole process.
       this.pipeline.execute(req, res).catch((e) => {
         this.logger.error(e);
-
-        if (!res.headersSent) {
-          res.statusCode = 502;
-          res.end();
-        }
+        sendErrorResponse(res, 502, `request failed: ${describeError(e)}`);
       });
     });
 

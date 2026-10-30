@@ -8,5 +8,6 @@ declare module 'http' {
     mockRuleParams?: Record<string, string>;
     query?: Record<string, any>;
     startTime?: number;
+    wsStatusCode?: number;
   }
 }

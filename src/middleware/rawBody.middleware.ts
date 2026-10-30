@@ -1,6 +1,7 @@
 import { IncomingMessage, ServerResponse } from 'http';
 import { Middleware } from '../services/pipeline.service';
 import { LoggerService } from '../services/logger.service';
+import { describeError, sendErrorResponse } from '../utils/error-response';
 
 export class RawBodyMiddleware implements Middleware<[proxyRes: IncomingMessage, req: IncomingMessage, res: ServerResponse]> {
   constructor(
@@ -29,11 +30,7 @@ export class RawBodyMiddleware implements Middleware<[proxyRes: IncomingMessage,
         // clean error response instead and resolve cleanly so this doesn't
         // surface as an unhandled rejection racing with a normal response.
         this.logger.error(err);
-
-        if (!res.headersSent) {
-          res.statusCode = 502;
-          res.end();
-        }
+        sendErrorResponse(res, 502, `upstream response failed: ${describeError(err)}`);
 
         resolve();
       });

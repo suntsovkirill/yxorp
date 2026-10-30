@@ -16,6 +16,8 @@ import { RewriteMiddleware } from '../middleware/rewrite.middleware';
 import { ProxyMiddleware } from '../middleware/proxy.middleware';
 import { MockMiddleware } from '../middleware/mock.middleware';
 import { StaticMiddleware } from '../middleware/static.middleware';
+import { describeError, sendErrorResponse } from '../utils/error-response';
+import { formatAccessLog } from '../utils/access-log';
 
 export function createServer(
   config: Config,
@@ -58,16 +60,21 @@ export function createServer(
     // leaving the client hanging with no response.
     proxy.execute(proxyRes, req, res).catch((e: any) => {
       logger.error(e);
-
-      if (!res.headersSent) {
-        res.statusCode = 502;
-        res.end();
-      }
+      sendErrorResponse(res, 502, `failed to process the upstream response: ${describeError(e)}`);
     });
   });
 
   // 6. WebSocket upgrade handling
+  // Record what the upstream answered so the access-log line (written when the
+  // connection ends) shows 101 for an upgraded socket, or the upstream's status
+  // for a refused upgrade.
+  proxy.on('proxyReqWs', (proxyReq, req) => {
+    proxyReq.once('upgrade', () => { req.wsStatusCode = 101; });
+    proxyReq.once('response', (proxyRes) => { req.wsStatusCode = proxyRes.statusCode; });
+  });
+
   server.addListener('upgrade', (req: IncomingMessage, socket: Duplex, head: Buffer) => {
+    req.startTime = Date.now();
     const url = req.url || '';
     const proxyOptions = config.get().proxyOptions;
 
@@ -86,7 +93,25 @@ export function createServer(
       ...remoteTarget,
     };
 
-    proxy.ws(req, socket, options, head).catch((error: any) => logger.info(error));
+    // ws() resolves once the client socket closes and rejects if the upstream
+    // connection fails — httpxy only half-closes the client socket then
+    // (`end()`), which can leave it open, so destroy it. It can also throw
+    // synchronously (e.g. a target that isn't a valid URL) — inside this event
+    // listener that would be an uncaught exception that crashes the process.
+    const onError = (error: unknown) => {
+      logger.error(error);
+      socket.destroy();
+      logger.info(formatAccessLog('ws', req.wsStatusCode ?? 502, req));
+    };
+
+    try {
+      proxy.ws(req, socket, options, head).then(
+        () => logger.info(formatAccessLog('ws', req.wsStatusCode ?? 502, req)),
+        onError,
+      );
+    } catch (error) {
+      onError(error);
+    }
   });
 
   const listen = (port: string | number, callback?: () => void) => {

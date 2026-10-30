@@ -29,10 +29,20 @@ export class RewriteMiddleware implements Middleware<[proxyRes: IncomingMessage,
         delete require.cache[require.resolve(fullPath)];
         const handler = require(fullPath);
 
-        if (typeof handler === 'function') {
-          const encodedResponse = await decodeBuffer(response, encoding);
-          const rewritedResponse: Buffer = await handler(encodedResponse, proxyRes, req, res);
-          proxyRes.rawBody = await encodeBuffer(rewritedResponse, encoding);
+        if (typeof handler !== 'function') {
+          // Same mistake MockMiddleware guards against (`exports.handler = ...`
+          // instead of `module.exports = ...`) — say so instead of silently
+          // passing the response through.
+          this.logger.error(`Rewrite script "${fullPath}" does not export a function (module.exports = (body, proxyRes, req, res) => {...}) — response passed through unchanged`);
+        } else {
+          const decodedResponse = await decodeBuffer(response, encoding);
+          const rewrittenBody = toResponseBody(await handler(decodedResponse, proxyRes, req, res));
+
+          if (rewrittenBody === undefined) {
+            this.logger.warn(`Rewrite script "${fullPath}" returned nothing — response passed through unchanged`);
+          } else {
+            proxyRes.rawBody = await encodeBuffer(rewrittenBody, encoding);
+          }
         }
 
         this.logRewrite(req, proxyRes);
@@ -76,4 +86,29 @@ export class RewriteMiddleware implements Middleware<[proxyRes: IncomingMessage,
     req.rewriteLogged = true;
     this.logger.info(formatAccessLog('rewrite', proxyRes.statusCode, req));
   }
+}
+
+/**
+ * Turns a rewrite script's return value into a response body: a Buffer or
+ * Uint8Array as is, a string as UTF-8, anything else JSON-serialized.
+ * `undefined`/`null` (e.g. a forgotten `return`) means "no rewrite".
+ */
+function toResponseBody(value: unknown): Buffer | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+
+  if (Buffer.isBuffer(value)) {
+    return value;
+  }
+
+  if (value instanceof Uint8Array) {
+    return Buffer.from(value.buffer, value.byteOffset, value.byteLength);
+  }
+
+  if (typeof value === 'string') {
+    return Buffer.from(value, 'utf-8');
+  }
+
+  return Buffer.from(JSON.stringify(value), 'utf-8');
 }

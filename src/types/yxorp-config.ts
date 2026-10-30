@@ -6,6 +6,11 @@ export interface ConfigFile {
   target: string;
   proxyPort: string | number;
   proxyHeaders?: Record<string, string>;
+  // Verify the target's TLS certificate (default false — local dev targets
+  // often use self-signed certificates).
+  secure?: boolean;
+  // Rewrite the Host header to the target's host (default true).
+  changeOrigin?: boolean;
   remoteRules?: RemoteRule[];
   staticRules?: StaticRule[];
   mockRules?: MockRule[];

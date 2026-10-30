@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import path from 'path';
 import { startTargetServer, stopTargetServer } from './helpers/target-server';
-import { createYxorp, fetchYxorp } from './helpers/create-yxorp';
+import { createYxorp, createRecordingLogger, fetchYxorp, YxorpInstance } from './helpers/create-yxorp';
 import http from 'http';
 
 const fixtures = path.resolve(__dirname, 'fixtures');
@@ -117,5 +117,51 @@ describe('Rewrite disabled rule', () => {
     const data = JSON.parse(res.body);
     expect(data.name).toBe('Alice');
     expect(data.mocked).toBeUndefined();
+  });
+});
+
+describe('Rewrite script return values', () => {
+  let instance: YxorpInstance;
+  const { logger, messages } = createRecordingLogger();
+
+  beforeAll(async () => {
+    instance = await createYxorp({
+      target: `http://localhost:${targetPort}`,
+      rewriteRules: [
+        { method: 'GET', path: '/api/user', script: path.join(fixtures, 'rewrite-string.js') },
+        { method: 'GET', path: '/api/items', script: path.join(fixtures, 'rewrite-object.js') },
+        { method: 'GET', path: '/api/headers', script: path.join(fixtures, 'rewrite-no-return.js') },
+        { method: 'GET', path: '/api/echo', script: path.join(fixtures, 'rewrite-not-function.js') },
+      ],
+    }, { logger });
+  });
+
+  afterAll(async () => {
+    await instance.stop();
+  });
+
+  it('accepts a string and sets content-length in bytes, not characters', async () => {
+    const res = await fetchYxorp(instance.port, '/api/user');
+    expect(JSON.parse(res.body)).toEqual({ greeting: 'Привет, Alice' });
+    expect(Number(res.headers['content-length'])).toBe(Buffer.byteLength(res.body));
+  });
+
+  it('JSON-serializes a returned object', async () => {
+    const res = await fetchYxorp(instance.port, '/api/items');
+    expect(JSON.parse(res.body)).toEqual({ count: 2, rewritten: 'объект' });
+    expect(Number(res.headers['content-length'])).toBe(Buffer.byteLength(res.body));
+  });
+
+  it('keeps the original body and warns when the script returns nothing', async () => {
+    const res = await fetchYxorp(instance.port, '/api/headers');
+    expect(res.body).toBe('headers test');
+    expect(messages.some(m => m.level === 'warn' && m.message.includes('returned nothing'))).toBe(true);
+  });
+
+  it('logs an error and passes the response through when the script does not export a function', async () => {
+    const res = await fetchYxorp(instance.port, '/api/echo');
+    expect(res.statusCode).toBe(200);
+    expect(JSON.parse(res.body).method).toBe('GET');
+    expect(messages.some(m => m.level === 'error' && m.message.includes('does not export a function'))).toBe(true);
   });
 });

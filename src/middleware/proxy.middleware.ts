@@ -4,6 +4,8 @@ import { RemoteRulesMatcher, RemoteTarget } from '../services/rules-matchers/rem
 import { Config } from '../services/config.service';
 import { Middleware } from '../services/pipeline.service';
 import { LoggerService } from '../services/logger.service';
+import { describeError, sendErrorResponse } from '../utils/error-response';
+import { formatAccessLog } from '../utils/access-log';
 
 export class ProxyMiddleware implements Middleware<[req: IncomingMessage, res: ServerResponse]> {
   constructor(
@@ -39,11 +41,8 @@ export class ProxyMiddleware implements Middleware<[req: IncomingMessage, res: S
       // (e.g. target ECONNREFUSED/DNS failure) — without this, the client
       // would otherwise hang forever waiting for a response that never comes.
       this.logger.error(error);
-
-      if (!res.headersSent) {
-        res.statusCode = 502;
-        res.end();
-      }
+      sendErrorResponse(res, 502, `cannot reach ${options.target}: ${describeError(error)}`);
+      this.logger.info(formatAccessLog('proxy', res.statusCode, req));
     });
   }
 }

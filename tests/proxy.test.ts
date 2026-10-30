@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { startTargetServer, stopTargetServer } from './helpers/target-server';
-import { createYxorp, fetchYxorp } from './helpers/create-yxorp';
+import { createYxorp, createRecordingLogger, fetchYxorp } from './helpers/create-yxorp';
 import http from 'http';
 
 let target: http.Server;
@@ -64,10 +64,11 @@ describe('Basic proxy', () => {
 
 describe('Unreachable target', () => {
   let unreachableYxorp: { port: number; stop: () => Promise<void> };
+  const { logger, messages } = createRecordingLogger();
 
   beforeAll(async () => {
     // Nothing listens on this port — connection attempts fail with ECONNREFUSED.
-    unreachableYxorp = await createYxorp({ target: 'http://127.0.0.1:1' });
+    unreachableYxorp = await createYxorp({ target: 'http://127.0.0.1:1' }, { logger });
   });
 
   afterAll(async () => {
@@ -77,5 +78,17 @@ describe('Unreachable target', () => {
   it('responds with 502 instead of hanging', async () => {
     const res = await fetchYxorp(unreachableYxorp.port, '/anything');
     expect(res.statusCode).toBe(502);
+  });
+
+  it('explains the failure in the 502 body', async () => {
+    const res = await fetchYxorp(unreachableYxorp.port, '/anything');
+    expect(res.headers['content-type']).toContain('text/plain');
+    expect(res.body).toBe('yxorp: cannot reach http://127.0.0.1:1: ECONNREFUSED\n');
+  });
+
+  it('writes an access-log line for the failed request', async () => {
+    messages.length = 0;
+    await fetchYxorp(unreachableYxorp.port, '/logged');
+    expect(messages.filter(m => /^proxy\s+502 GET \/logged \d+ms$/.test(m.message))).toHaveLength(1);
   });
 });

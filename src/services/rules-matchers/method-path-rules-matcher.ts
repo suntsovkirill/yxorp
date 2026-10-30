@@ -1,5 +1,5 @@
-import { match } from 'path-to-regexp';
 import { splitUrl } from '../../utils/url';
+import { matchPath } from '../../utils/path-pattern';
 
 export interface MethodPathRule {
   method: string;
@@ -21,7 +21,7 @@ export abstract class MethodPathRulesMatcher<T extends MethodPathRule> {
   }
 
   public params(url: string, rule: T): Record<string, string> | undefined {
-    return this.matchPath(rule.path, splitUrl(url).pathname)?.params;
+    return matchPath(rule.path, splitUrl(url).pathname)?.params;
   }
 
   /**
@@ -47,19 +47,11 @@ export abstract class MethodPathRulesMatcher<T extends MethodPathRule> {
         continue;
       }
 
-      const matchResult = this.matchPath(rule.path, pathname);
+      const matchResult = matchPath(rule.path, pathname);
 
       if (matchResult) {
         return { rule, matchResult };
       }
     }
-  }
-
-  private matchPath(path: string, pathname: string): { params: Record<string, string> } | undefined {
-    const matchResult = match<Record<string, string>>(path, {
-      decode: decodeURIComponent,
-    })(pathname);
-
-    return matchResult || undefined;
   }
 }

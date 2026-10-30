@@ -1,21 +1,8 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { Config } from '../src/services/config.service';
-import { LoggerService } from '../src/services/logger.service';
 import { createConfigReloadHandler } from '../src/services/config-reload';
 import { buildProxyConfig } from '../src/services/proxy-config';
-
-function createRecordingLogger() {
-  const logger = new LoggerService();
-  const messages: { level: string; message: string }[] = [];
-
-  for (const level of ['info', 'error', 'warn', 'debug'] as const) {
-    logger[level] = ((message: string) => {
-      messages.push({ level, message });
-    }) as any;
-  }
-
-  return { logger, messages };
-}
+import { createRecordingLogger } from './helpers/create-yxorp';
 
 describe('config reload', () => {
   let appConfig: Config;
@@ -91,5 +78,14 @@ describe('config reload', () => {
     onReload({ proxyPort: 3000 } as any);
 
     expect(appConfig.get().target).toBe('http://from-cli:9000');
+  });
+
+  it('warns about unknown keys in the reloaded config', () => {
+    const { logger, messages } = createRecordingLogger();
+    const onReload = createConfigReloadHandler(appConfig, logger, ['node', 'yxorp']);
+
+    onReload({ target: 'http://from-file:8080', proxyPort: 3000, mockRule: [] } as any);
+
+    expect(messages).toContainEqual({ level: 'warn', message: 'Unknown config key "mockRule" is ignored' });
   });
 });

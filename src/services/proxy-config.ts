@@ -7,9 +7,9 @@ import { ConfigFile, YxorpConfig } from '../types/yxorp-config';
 export function buildProxyConfig(cfg: ConfigFile): YxorpConfig {
   const proxyOptions: Record<string, any> = {
     target: cfg.target,
-    changeOrigin: true,
+    changeOrigin: cfg.changeOrigin ?? true,
     followRedirects: true,
-    secure: false,
+    secure: cfg.secure ?? false,
     ws: true,
     selfHandleResponse: true,
   };

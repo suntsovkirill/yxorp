@@ -1,7 +1,7 @@
 import { Config } from './config.service';
 import { LoggerService } from './logger.service';
 import { applyCliOverrides } from './cli-overrides';
-import { validateConfig } from './config-validator';
+import { findConfigWarnings, validateConfig } from './config-validator';
 import { buildProxyConfig } from './proxy-config';
 import { ConfigFile } from '../types/yxorp-config';
 
@@ -27,6 +27,8 @@ export function createConfigReloadHandler(
       errors.forEach(err => logger.error(`  - ${err}`));
       return;
     }
+
+    findConfigWarnings(config).forEach(warning => logger.warn(warning));
 
     const runningPort = appConfig.get().proxyPort;
 

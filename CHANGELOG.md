@@ -23,11 +23,47 @@ config schema, CLI flags, or mock/rewrite script API.
   captures `/assets-old/...` or `/assetsfile.js`.
 - `--port`/`--target` CLI overrides are re-applied on config hot-reload instead
   of being silently replaced by the file's values after the first save.
+- An error thrown by a later middleware (e.g. while starting the proxy request)
+  no longer escapes as an unhandled promise rejection — which crashes Node by
+  default — leaving the client hanging; the request now gets a 502. The
+  pipeline awaits `next()`'s promise even when a middleware doesn't return it.
+- WebSocket upgrades: a target that throws synchronously (e.g. not a valid URL)
+  no longer crashes the process; on an upstream error the client socket is
+  destroyed instead of being left half-open; errors are logged as errors
+  (were logged as info).
+- Rewrite scripts: a string return value is sent as UTF-8 with a correct
+  byte-based `content-length` (non-ASCII text used to get a too-short length);
+  objects are JSON-serialized; returning nothing keeps the original body (with
+  a warning) instead of sending an empty body; a script that doesn't export a
+  function is reported as an error instead of being silently skipped.
+- `bin/yxorp.js` only reports "Yxorp is not built" when `dist/index.js` is
+  actually missing — a missing dependency inside the app used to be reported
+  the same way.
+
+### Added
+- `--help` / `-h` CLI flag.
+- `changeOrigin` and `secure` config options (defaults unchanged: `true` and
+  `false`).
+- Error responses from Yxorp (unreachable target, failed upstream response)
+  carry a plain-text body explaining the failure, e.g.
+  `yxorp: cannot reach http://localhost:8080: ECONNREFUSED`, instead of an
+  empty 502.
+- WebSocket connections get an access-log line (`ws` label) when they close.
+- Warnings for unknown config keys (typos like `mockRule` or `statuscode`) at
+  startup and on reload.
 
 ### Changed
 - Changing `proxyPort` in the config file at runtime now logs a warning that a
   restart is needed (the server keeps listening on the original port) instead
   of being ignored silently.
+- Stricter config validation: `target` must be an absolute `http(s)` URL,
+  `remoteRules[].target` an absolute `http`/`https`/`ws`/`wss` URL (path-only
+  targets never worked — every request to them failed), `method` a known HTTP
+  method, `statusCode` an integer in 100–599, `proxyHeaders` values strings,
+  and boolean flags booleans. Static rule `path`s are no longer validated as
+  path-to-regexp patterns, since they're plain prefixes.
+- Compiled path-to-regexp matchers are cached per pattern instead of being
+  recompiled for every rule on every request.
 
 ### Documentation
 - Fixed the remote-rule examples in the README: a pattern without a wildcard

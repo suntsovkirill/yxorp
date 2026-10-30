@@ -1,7 +1,7 @@
 import { Config } from '../config.service';
-import { match, compile } from 'path-to-regexp';
 import { RemoteRule } from '../../types/yxorp-config';
 import { splitUrl } from '../../utils/url';
+import { compilePath, matchPath } from '../../utils/path-pattern';
 
 /**
  * httpxy options that route a request to a remote rule's target.
@@ -45,9 +45,7 @@ export class RemoteRulesMatcher {
         continue;
       }
 
-      const matchResult = match<Record<string, string>>(rule.path, {
-        decode: decodeURIComponent
-      })(pathname);
+      const matchResult = matchPath(rule.path, pathname);
 
       if (matchResult) {
         return this.buildTarget(rule, matchResult.params, search);
@@ -56,20 +54,15 @@ export class RemoteRulesMatcher {
   }
 
   private buildTarget(rule: RemoteRule, params: Record<string, string>, search: string): RemoteTarget {
-    let targetUrl: URL;
-
-    try {
-      targetUrl = new URL(rule.target);
-    } catch {
-      // Not a valid URL — treat as a path pattern
-      return { target: compile(rule.target)(params) + search, ignorePath: true };
-    }
+    // The validator only accepts absolute http(s)/ws(s) URLs; anything else
+    // throws here and the caller falls back to the default target.
+    const targetUrl = new URL(rule.target);
 
     if (targetUrl.pathname === '/' && !targetUrl.search) {
       return { target: rule.target, ignorePath: false };
     }
 
-    const targetPath = compile(targetUrl.pathname)(params);
+    const targetPath = compilePath(targetUrl.pathname, params);
 
     return {
       target: targetUrl.origin + targetPath + mergeSearch(targetUrl.search, search),

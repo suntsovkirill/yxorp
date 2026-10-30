@@ -3,6 +3,7 @@ import { Middleware } from '../services/pipeline.service';
 import { LoggerService } from '../services/logger.service';
 import { formatAccessLog } from '../utils/access-log';
 import { forwardResponseHeaders } from '../utils/headers';
+import { describeError, sendErrorResponse } from '../utils/error-response';
 
 /**
  * Streams the upstream response straight to the client when no rewrite applies.
@@ -45,8 +46,7 @@ export class StreamMiddleware implements Middleware<[proxyRes: IncomingMessage, 
         this.logger.error(err);
 
         if (!res.headersSent) {
-          res.statusCode = 502;
-          res.end();
+          sendErrorResponse(res, 502, `upstream response failed: ${describeError(err)}`);
         } else {
           res.destroy();
         }

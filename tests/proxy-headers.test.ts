@@ -59,6 +59,48 @@ describe('proxyHeaders', () => {
   });
 });
 
+describe('changeOrigin', () => {
+  let target: http.Server;
+  let targetPort: number;
+  let receivedHost: string | undefined;
+
+  beforeAll(async () => {
+    target = http.createServer((req, res) => {
+      receivedHost = req.headers.host;
+      res.end('ok');
+    });
+
+    await new Promise<void>((resolve) => target.listen(0, resolve));
+    targetPort = (target.address() as any).port;
+  });
+
+  afterAll(async () => {
+    target.close();
+  });
+
+  it('rewrites the Host header to the target by default', async () => {
+    const yxorp = await createYxorp({ target: `http://localhost:${targetPort}` });
+
+    try {
+      await fetchYxorp(yxorp.port, '/');
+      expect(receivedHost).toBe(`localhost:${targetPort}`);
+    } finally {
+      await yxorp.stop();
+    }
+  });
+
+  it('keeps the client Host header with changeOrigin: false', async () => {
+    const yxorp = await createYxorp({ target: `http://localhost:${targetPort}`, changeOrigin: false });
+
+    try {
+      await fetchYxorp(yxorp.port, '/');
+      expect(receivedHost).toBe(`localhost:${yxorp.port}`);
+    } finally {
+      await yxorp.stop();
+    }
+  });
+});
+
 describe('Hop-by-hop response headers', () => {
   let target: http.Server;
   let targetPort: number;
