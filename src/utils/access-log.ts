@@ -1,4 +1,5 @@
 import { IncomingMessage } from 'http';
+import { LoggerService } from '../services/logger.service';
 import { elapsedMs } from './request-timing';
 
 const LABEL_WIDTH = 8;
@@ -10,4 +11,14 @@ const LABEL_WIDTH = 8;
  */
 export function formatAccessLog(label: string, statusCode: number | string | undefined, req: IncomingMessage): string {
   return `${label.padEnd(LABEL_WIDTH)}${statusCode} ${req.method} ${req.url} ${elapsedMs(req)}ms`;
+}
+
+/**
+ * Writes the request's access-log line and records which middleware handled it
+ * (`req.handledBy`, e.g. `stream`, `mock`) — traffic capture (HAR/record) uses
+ * it to tell upstream responses from local ones.
+ */
+export function logAccess(logger: LoggerService, label: string, statusCode: number | string | undefined, req: IncomingMessage): void {
+  req.handledBy = label;
+  logger.info(formatAccessLog(label, statusCode, req));
 }

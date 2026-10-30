@@ -1,3 +1,5 @@
+import fs from 'fs';
+import path from 'path';
 import { IncomingMessage, ServerResponse } from 'http';
 import { Duplex } from 'stream';
 import { HttpServer } from './http-server.service';
@@ -16,8 +18,11 @@ import { RewriteMiddleware } from '../middleware/rewrite.middleware';
 import { ProxyMiddleware } from '../middleware/proxy.middleware';
 import { MockMiddleware } from '../middleware/mock.middleware';
 import { StaticMiddleware } from '../middleware/static.middleware';
+import { CorsMiddleware } from '../middleware/cors.middleware';
+import { CaptureListener, CaptureMiddleware } from '../middleware/capture.middleware';
+import { HttpsOptions } from '../types/yxorp-config';
 import { describeError, sendErrorResponse } from '../utils/error-response';
-import { formatAccessLog } from '../utils/access-log';
+import { logAccess } from '../utils/access-log';
 
 export function createServer(
   config: Config,
@@ -25,6 +30,10 @@ export function createServer(
   rewriteRulesMatcher: RewriteRulesMatcher,
   mockRulesMatcher: MockRulesMatcher,
   remoteRulesMatcher: RemoteRulesMatcher,
+  options: {
+    // Traffic capture listeners (HAR export, record mode) — capture is off when empty.
+    capture?: CaptureListener[];
+  } = {},
 ): {
   server: HttpServer;
   listen: (port: string | number, callback?: () => void) => void;
@@ -43,7 +52,12 @@ export function createServer(
 
   // 3. Server pipeline (incoming requests)
   const serverPipeline = new Pipeline<[req: IncomingMessage, res: ServerResponse]>();
+  if (options.capture?.length) {
+    serverPipeline.use(new CaptureMiddleware(options.capture, logger));
+  }
+
   serverPipeline.use(
+    new CorsMiddleware(config, logger),
     new StaticMiddleware(config, logger),
     new BootstrapMiddleware(rewriteRulesMatcher, mockRulesMatcher, logger),
     new MockMiddleware(logger),
@@ -51,7 +65,7 @@ export function createServer(
   );
 
   // 4. HttpServer wraps the server pipeline
-  const server = new HttpServer(serverPipeline, logger);
+  const server = new HttpServer(serverPipeline, logger, readTls(config.get().https));
 
   // 5. Attach proxy pipeline to proxyRes event
   proxy.on('proxyRes', (proxyRes: IncomingMessage, req: IncomingMessage, res: ServerResponse) => {
@@ -101,12 +115,12 @@ export function createServer(
     const onError = (error: unknown) => {
       logger.error(error);
       socket.destroy();
-      logger.info(formatAccessLog('ws', req.wsStatusCode ?? 502, req));
+      logAccess(logger, 'ws', req.wsStatusCode ?? 502, req);
     };
 
     try {
       proxy.ws(req, socket, options, head).then(
-        () => logger.info(formatAccessLog('ws', req.wsStatusCode ?? 502, req)),
+        () => logAccess(logger, 'ws', req.wsStatusCode ?? 502, req),
         onError,
       );
     } catch (error) {
@@ -119,4 +133,24 @@ export function createServer(
   };
 
   return { server, listen };
+}
+
+/**
+ * Reads the `https` key/certificate files (relative to the config directory).
+ * Throws with the offending path if one can't be read — the server can't start.
+ */
+function readTls(options: HttpsOptions | undefined): { key: Buffer; cert: Buffer } | undefined {
+  if (!options) {
+    return undefined;
+  }
+
+  const read = (field: 'key' | 'cert') => {
+    try {
+      return fs.readFileSync(path.resolve(options[field]));
+    } catch (e) {
+      throw new Error(`Cannot read "https.${field}" file "${options[field]}": ${describeError(e)}`, { cause: e });
+    }
+  };
+
+  return { key: read('key'), cert: read('cert') };
 }

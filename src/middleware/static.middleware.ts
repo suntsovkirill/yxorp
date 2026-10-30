@@ -5,7 +5,7 @@ import mime from 'mime';
 import { Config } from '../services/config.service';
 import { Middleware } from '../services/pipeline.service';
 import { LoggerService } from '../services/logger.service';
-import { formatAccessLog } from '../utils/access-log';
+import { logAccess } from '../utils/access-log';
 import { StaticRule } from '../types/yxorp-config';
 
 export class StaticMiddleware implements Middleware<[req: IncomingMessage, res: ServerResponse]> {
@@ -48,7 +48,7 @@ export class StaticMiddleware implements Middleware<[req: IncomingMessage, res: 
       res.setHeader('content-length', file.length);
       res.end(file);
 
-      this.logger.info(formatAccessLog('static', res.statusCode, req));
+      logAccess(this.logger, 'static', res.statusCode, req);
     } catch (e) {
       this.logger.error(e);
       next();

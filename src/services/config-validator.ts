@@ -11,21 +11,23 @@ const HTTP_METHODS = new Set(http.METHODS.map(method => method.toUpperCase()));
 
 // Keys the config understands — anything else is most likely a typo (e.g.
 // `mockRule` instead of `mockRules`) that would otherwise be silently ignored.
-const KNOWN_TOP_LEVEL_KEYS = new Set([
+export const KNOWN_TOP_LEVEL_KEYS = new Set([
   '$schema',
   'target',
   'proxyPort',
   'proxyHeaders',
   'secure',
   'changeOrigin',
+  'cors',
+  'https',
   ...RULE_ARRAYS,
 ]);
 
-const KNOWN_RULE_KEYS: Record<RuleArrayKey, Set<string>> = {
+export const KNOWN_RULE_KEYS: Record<RuleArrayKey, Set<string>> = {
   remoteRules: new Set(['path', 'target', 'ws', 'disable']),
   staticRules: new Set(['path', 'directory', 'caseInsensitive', 'directoryIndex', 'disable']),
-  mockRules: new Set(['method', 'path', 'file', 'script', 'statusCode', 'disable']),
-  rewriteRules: new Set(['method', 'path', 'file', 'script', 'statusCode', 'disable']),
+  mockRules: new Set(['method', 'path', 'match', 'file', 'script', 'json', 'body', 'statusCode', 'headers', 'delay', 'disable']),
+  rewriteRules: new Set(['method', 'path', 'match', 'file', 'script', 'json', 'body', 'statusCode', 'headers', 'delay', 'disable']),
 };
 
 /**
@@ -74,6 +76,8 @@ export function validateConfig(config: any): string[] {
 
   errors.push(...validateOptionalBoolean('"secure"', config.secure));
   errors.push(...validateOptionalBoolean('"changeOrigin"', config.changeOrigin));
+  errors.push(...validateCors(config.cors));
+  errors.push(...validateHttps(config.https));
 
   for (const key of RULE_ARRAYS) {
     const rules = config[key];
@@ -191,34 +195,128 @@ function validateRule(key: RuleArrayKey, rule: any, index: number): string[] {
         errors.push(`${label} "statusCode" must be an integer between 100 and 599`);
       }
 
-      errors.push(...validateFileOrScriptRule(label, rule));
+      if (rule.delay !== undefined && (!Number.isInteger(rule.delay) || rule.delay < 0)) {
+        errors.push(`${label} "delay" must be a non-negative integer (milliseconds)`);
+      }
+
+      errors.push(...validateStringMap(`${label} "headers"`, rule.headers));
+      errors.push(...validateMatch(label, rule.match));
+      errors.push(...validateBodySource(label, rule));
       break;
   }
 
   return errors;
 }
 
-function validateFileOrScriptRule(label: string, rule: any): string[] {
-  const hasFile = 'file' in rule;
-  const hasScript = 'script' in rule;
+const CORS_KEYS = new Set(['origin', 'credentials', 'maxAge', 'exposeHeaders']);
 
-  if (hasFile && hasScript) {
-    return [`${label} must declare only one of "file" or "script", not both`];
+function validateCors(cors: any): string[] {
+  if (cors === undefined || typeof cors === 'boolean') {
+    return [];
   }
 
-  if (!hasFile && !hasScript) {
-    return [`${label} must declare either "file" or "script"`];
+  if (!cors || typeof cors !== 'object' || Array.isArray(cors)) {
+    return ['"cors" must be true, false, or an object'];
   }
 
-  if (hasFile && (typeof rule.file !== 'string' || !rule.file.trim())) {
-    return [`${label} has a "file" that must be a non-empty string`];
+  const errors = Object.keys(cors)
+    .filter(key => !CORS_KEYS.has(key))
+    .map(key => `"cors" has an unknown key "${key}" (expected ${[...CORS_KEYS].map(k => `"${k}"`).join(', ')})`);
+
+  const { origin, maxAge, exposeHeaders } = cors;
+
+  if (origin !== undefined && typeof origin !== 'string' && !(Array.isArray(origin) && origin.every((o: unknown) => typeof o === 'string'))) {
+    errors.push('"cors.origin" must be a string or an array of strings');
   }
 
-  if (hasScript && (typeof rule.script !== 'string' || !rule.script.trim())) {
-    return [`${label} has a "script" that must be a non-empty string`];
+  errors.push(...validateOptionalBoolean('"cors.credentials"', cors.credentials));
+
+  if (maxAge !== undefined && (!Number.isInteger(maxAge) || maxAge < 0)) {
+    errors.push('"cors.maxAge" must be a non-negative integer (seconds)');
+  }
+
+  if (exposeHeaders !== undefined && !(Array.isArray(exposeHeaders) && exposeHeaders.every((h: unknown) => typeof h === 'string'))) {
+    errors.push('"cors.exposeHeaders" must be an array of strings');
+  }
+
+  return errors;
+}
+
+function validateHttps(https: any): string[] {
+  if (https === undefined) {
+    return [];
+  }
+
+  if (!https || typeof https !== 'object' || Array.isArray(https)) {
+    return ['"https" must be an object with "key" and "cert" file paths'];
+  }
+
+  return (['key', 'cert'] as const)
+    .filter(key => typeof https[key] !== 'string' || !https[key].trim())
+    .map(key => `"https.${key}" must be a non-empty file path`);
+}
+
+const BODY_SOURCES = ['file', 'script', 'json', 'body'] as const;
+
+function validateBodySource(label: string, rule: any): string[] {
+  const declared = BODY_SOURCES.filter(source => source in rule);
+
+  if (declared.length > 1) {
+    return [`${label} must declare only one of "file", "script", "json" or "body", not ${declared.map(s => `"${s}"`).join(' and ')}`];
+  }
+
+  if (declared.length === 0) {
+    return [`${label} must declare one of "file", "script", "json" or "body"`];
+  }
+
+  const [source] = declared;
+
+  if ((source === 'file' || source === 'script') && (typeof rule[source] !== 'string' || !rule[source].trim())) {
+    return [`${label} has a "${source}" that must be a non-empty string`];
+  }
+
+  if (source === 'body' && typeof rule.body !== 'string') {
+    return [`${label} has a "body" that must be a string (use "json" for structured data)`];
+  }
+
+  if (source === 'json' && rule.json === undefined) {
+    return [`${label} has a "json" that must be a JSON value`];
   }
 
   return [];
+}
+
+function validateMatch(label: string, match: any): string[] {
+  if (match === undefined) {
+    return [];
+  }
+
+  if (!match || typeof match !== 'object' || Array.isArray(match)) {
+    return [`${label} "match" must be an object with optional "query" and "headers"`];
+  }
+
+  const errors = Object.keys(match)
+    .filter(key => key !== 'query' && key !== 'headers')
+    .map(key => `${label} "match" has an unknown key "${key}" (expected "query" or "headers")`);
+
+  errors.push(...validateStringMap(`${label} "match.query"`, match.query));
+  errors.push(...validateStringMap(`${label} "match.headers"`, match.headers));
+
+  return errors;
+}
+
+function validateStringMap(label: string, value: any): string[] {
+  if (value === undefined) {
+    return [];
+  }
+
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return [`${label} must be an object of string values`];
+  }
+
+  return Object.entries(value)
+    .filter(([, v]) => typeof v !== 'string')
+    .map(([key]) => `${label} value for "${key}" must be a string`);
 }
 
 function validateOptionalBoolean(label: string, value: unknown): string[] {

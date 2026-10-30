@@ -88,4 +88,14 @@ describe('config reload', () => {
 
     expect(messages).toContainEqual({ level: 'warn', message: 'Unknown config key "mockRule" is ignored' });
   });
+
+  it('warns that a changed https setting needs a restart and keeps the running one', () => {
+    const { logger, messages } = createRecordingLogger();
+    const onReload = createConfigReloadHandler(appConfig, logger, ['node', 'yxorp']);
+
+    onReload({ target: 'http://from-file:8080', proxyPort: 3000, https: { key: './k.pem', cert: './c.pem' } });
+
+    expect(appConfig.get().https).toBeUndefined();
+    expect(messages.some(m => m.level === 'warn' && m.message.includes('"https" changed'))).toBe(true);
+  });
 });

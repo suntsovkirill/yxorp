@@ -1,4 +1,5 @@
 import http, { IncomingMessage, Server, ServerResponse } from 'http';
+import https from 'https';
 import { Pipeline } from './pipeline.service';
 import { LoggerService } from './logger.service';
 import { describeError, sendErrorResponse } from '../utils/error-response';
@@ -16,8 +17,10 @@ export class HttpServer {
   constructor(
     private pipeline: Pipeline<[req: IncomingMessage, res: ServerResponse]>,
     private logger: LoggerService,
+    // When given, the server speaks HTTPS (and WSS) with this key/certificate.
+    tls?: { key: Buffer; cert: Buffer },
   ) {
-    this.server = http.createServer((req: IncomingMessage, res: ServerResponse) => {
+    const handler = (req: IncomingMessage, res: ServerResponse) => {
       req.startTime = Date.now();
 
       // pipeline.execute() is async — an uncaught rejection here (e.g. a
@@ -27,7 +30,9 @@ export class HttpServer {
         this.logger.error(e);
         sendErrorResponse(res, 502, `request failed: ${describeError(e)}`);
       });
-    });
+    };
+
+    this.server = tls ? https.createServer(tls, handler) : http.createServer(handler);
 
     this.use = this.pipeline.use.bind(this.pipeline);
     this.on = this.server.on.bind(this.server);

@@ -22,7 +22,7 @@ describe('config-watcher', () => {
   afterEach(() => {
     watchers.forEach(w => w.close());
     watchers.length = 0;
-    tmpFiles.forEach(f => { try { fs.unlinkSync(f); } catch {} });
+    tmpFiles.forEach(f => { try { fs.unlinkSync(f); } catch { /* already gone */ } });
     tmpFiles.length = 0;
   });
 

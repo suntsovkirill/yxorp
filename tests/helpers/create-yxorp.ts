@@ -5,6 +5,7 @@ import { RewriteRulesMatcher } from '../../src/services/rules-matchers/rewrite-r
 import { RemoteRulesMatcher } from '../../src/services/rules-matchers/remote-rules-matcher.service';
 import { createServer } from '../../src/services/yxorp-server.service';
 import { buildProxyConfig } from '../../src/services/proxy-config';
+import { CaptureListener } from '../../src/middleware/capture.middleware';
 import { ConfigFile } from '../../src/types/yxorp-config';
 
 export interface YxorpInstance {
@@ -40,21 +41,14 @@ export function createRecordingLogger(): { logger: LoggerService; messages: { le
 
 export async function createYxorp(
   configFile: Partial<ConfigFile> & { target: string },
-  options?: { logger?: LoggerService },
+  options?: { logger?: LoggerService; capture?: CaptureListener[] },
 ): Promise<YxorpInstance> {
   const logger = options?.logger ?? createSilentLogger();
 
   const appConfig = new Config();
   appConfig.set(buildProxyConfig({
-    target: configFile.target,
+    ...configFile,
     proxyPort: configFile.proxyPort || 0,
-    proxyHeaders: configFile.proxyHeaders,
-    secure: configFile.secure,
-    changeOrigin: configFile.changeOrigin,
-    mockRules: configFile.mockRules || [],
-    rewriteRules: configFile.rewriteRules || [],
-    staticRules: configFile.staticRules || [],
-    remoteRules: configFile.remoteRules || [],
   }));
 
   const mockRulesMatcher = new MockRulesMatcher(appConfig);
@@ -67,6 +61,7 @@ export async function createYxorp(
     rewriteRulesMatcher,
     mockRulesMatcher,
     remoteRulesMatcher,
+    { capture: options?.capture },
   );
 
   return new Promise((resolve) => {

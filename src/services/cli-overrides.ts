@@ -7,7 +7,7 @@ import { ConfigFile } from '../types/yxorp-config';
  * value — `--port --target http://x` should leave `--port` unset rather than
  * swallowing `--target` as its value.
  */
-function getArgValue(argv: string[], flag: string): string | undefined {
+export function getArgValue(argv: string[], flag: string): string | undefined {
   const prefix = `${flag}=`;
 
   for (let i = 0; i < argv.length; i++) {

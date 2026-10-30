@@ -1,4 +1,4 @@
-module.exports = (body, proxyRes, req, res) => {
+module.exports = (body) => {
   const data = JSON.parse(body.toString());
   data.rewritten = true;
   data.originalSource = data.source;

@@ -1,10 +1,12 @@
 import { IncomingMessage, ServerResponse } from 'http';
 import { SUPPORTED_ENCODING, encodeBuffer, decodeBuffer } from 'http-encoding';
-import fs from 'fs/promises';
 import path from 'path';
 import { Middleware } from '../services/pipeline.service';
 import { LoggerService } from '../services/logger.service';
-import { formatAccessLog } from '../utils/access-log';
+import { logAccess } from '../utils/access-log';
+import { loadScript } from '../services/script-loader';
+import { delay } from '../utils/delay';
+import { readRuleBody } from '../utils/rule-body';
 
 export class RewriteMiddleware implements Middleware<[proxyRes: IncomingMessage, req: IncomingMessage, res: ServerResponse]> {
   constructor(
@@ -21,19 +23,20 @@ export class RewriteMiddleware implements Middleware<[proxyRes: IncomingMessage,
         return;
       }
 
+      await delay(rewriteRule.delay);
+
       const encoding = proxyRes.headers['content-encoding'] as SUPPORTED_ENCODING;
       const response: Buffer = proxyRes.rawBody || Buffer.from('');
 
       if ('script' in rewriteRule) {
         const fullPath = path.resolve(rewriteRule.script);
-        delete require.cache[require.resolve(fullPath)];
-        const handler = require(fullPath);
+        const handler = await loadScript(fullPath);
 
         if (typeof handler !== 'function') {
           // Same mistake MockMiddleware guards against (`exports.handler = ...`
           // instead of `module.exports = ...`) — say so instead of silently
           // passing the response through.
-          this.logger.error(`Rewrite script "${fullPath}" does not export a function (module.exports = (body, proxyRes, req, res) => {...}) — response passed through unchanged`);
+          this.logger.error(`Rewrite script "${fullPath}" does not export a function (module.exports = (body, proxyRes, req, res) => {...} or export default) — response passed through unchanged`);
         } else {
           const decodedResponse = await decodeBuffer(response, encoding);
           const rewrittenBody = toResponseBody(await handler(decodedResponse, proxyRes, req, res));
@@ -44,25 +47,29 @@ export class RewriteMiddleware implements Middleware<[proxyRes: IncomingMessage,
             proxyRes.rawBody = await encodeBuffer(rewrittenBody, encoding);
           }
         }
+      } else {
+        const source = await readRuleBody(rewriteRule);
 
-        this.logRewrite(req, proxyRes);
+        if (source) {
+          proxyRes.rawBody = await encodeBuffer(source.body, encoding);
 
-        next();
-        return;
-      }
-
-      if ('file' in rewriteRule) {
-        const file = await fs.readFile(path.resolve(rewriteRule.file));
-        proxyRes.rawBody = await encodeBuffer(file, encoding);
-        if (rewriteRule.statusCode) {
-          proxyRes.statusCode = rewriteRule.statusCode;
+          // An inline `json` body is known to be JSON; for `file`/`body` the
+          // upstream content type is kept (override it with `headers`).
+          if ('json' in rewriteRule && source.contentType) {
+            proxyRes.headers['content-type'] = source.contentType;
+          }
         }
-
-        this.logRewrite(req, proxyRes);
-
-        next();
-        return;
       }
+
+      if (rewriteRule.statusCode) {
+        proxyRes.statusCode = rewriteRule.statusCode;
+      }
+
+      for (const [name, value] of Object.entries(rewriteRule.headers || {})) {
+        proxyRes.headers[name.toLowerCase()] = value;
+      }
+
+      this.logRewrite(req, proxyRes);
 
       next();
     } catch (e) {
@@ -84,7 +91,7 @@ export class RewriteMiddleware implements Middleware<[proxyRes: IncomingMessage,
    */
   private logRewrite(req: IncomingMessage, proxyRes: IncomingMessage): void {
     req.rewriteLogged = true;
-    this.logger.info(formatAccessLog('rewrite', proxyRes.statusCode, req));
+    logAccess(this.logger, 'rewrite', proxyRes.statusCode, req);
   }
 }
 

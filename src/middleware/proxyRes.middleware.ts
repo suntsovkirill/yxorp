@@ -1,7 +1,7 @@
 import { IncomingMessage, ServerResponse } from 'http';
 import { Middleware } from '../services/pipeline.service';
 import { LoggerService } from '../services/logger.service';
-import { formatAccessLog } from '../utils/access-log';
+import { logAccess } from '../utils/access-log';
 import { forwardResponseHeaders } from '../utils/headers';
 
 export class ProxyResMiddleware implements Middleware<[proxyRes: IncomingMessage, req: IncomingMessage, res: ServerResponse]> {
@@ -29,7 +29,7 @@ export class ProxyResMiddleware implements Middleware<[proxyRes: IncomingMessage
       // it sets req.rewriteLogged in both cases) — log here only for plain
       // pass-through, so every proxied request gets exactly one log line.
       if (!req.rewriteLogged) {
-        this.logger.info(formatAccessLog('proxy', res.statusCode, req));
+        logAccess(this.logger, 'proxy', res.statusCode, req);
       }
     } catch(e) {
       this.logger.error(e);

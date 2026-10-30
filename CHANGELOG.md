@@ -41,6 +41,35 @@ config schema, CLI flags, or mock/rewrite script API.
   the same way.
 
 ### Added
+- **CORS** (`"cors": true` or `{ origin, credentials, maxAge, exposeHeaders }`):
+  preflights are answered locally and CORS headers are added to every
+  response, replacing the target's own.
+- **HTTPS** (`"https": { "key", "cert" }`): serve the proxy (and WebSockets)
+  over TLS.
+- **Inline mock/rewrite bodies**: `"json": <value>` and `"body": "<text>"` as
+  alternatives to `file`/`script`.
+- **Rule options** for mock and rewrite rules: `headers` (response headers),
+  `delay` (ms, simulates a slow backend), `statusCode` on every rule type
+  (a default for scripts), and `match: { query, headers }` conditions to pick
+  rules by query params and request headers.
+- **Request body helpers** for mock scripts: `await req.json()`,
+  `req.text()`, `req.buffer()`. Read lazily, so scripts that read the stream
+  themselves are unaffected.
+- **ES module and TypeScript scripts**: `.mjs`, `"type": "module"` `.js`, and
+  `.ts` (on Node.js 22.18+, via its built-in type stripping), with
+  `export default` handlers.
+- CommonJS scripts are reloaded together with the local modules they
+  `require()`, not just the script file itself.
+- **`--har <file>`**: save all traffic (headers, decoded bodies, timings) as a
+  HAR 1.2 file.
+- **`--record <dir>`**: record proxied responses as files plus a
+  `recorded.json` of mock rules that replay them.
+- **`yxorp init`**: scaffold a `yxorp.json`.
+- **JSON Schema** (`schema.json`, shipped in the package) for editor
+  autocompletion and validation via `"$schema"`.
+- `--quiet` and `--verbose` log levels; `--verbose` logs which rule matched,
+  where requests were routed, and error stacks.
+- A clear message instead of a stack trace when `proxyPort` is already in use.
 - `--help` / `-h` CLI flag.
 - `changeOrigin` and `secure` config options (defaults unchanged: `true` and
   `false`).
@@ -53,6 +82,14 @@ config schema, CLI flags, or mock/rewrite script API.
   startup and on reload.
 
 ### Changed
+- **Node.js 20.19+ or 22.12+ is required** (was >= 20). The `httpxy`
+  dependency is ESM-only and is loaded with `require()`, which only works
+  unflagged from those versions — on Node 20.0–20.18 Yxorp failed at startup.
+- Replaced `winston` with a small built-in logger. Log lines keep the
+  `level: message` format; warnings and errors now go to stderr, and colors are
+  only used on a terminal (respecting `NO_COLOR`/`FORCE_COLOR`).
+- Development: `tsx` replaces `nodemon` + `ts-node`, the TypeScript config
+  extends `@tsconfig/node20`, and ESLint and coverage thresholds run in CI.
 - Changing `proxyPort` in the config file at runtime now logs a warning that a
   restart is needed (the server keeps listening on the original port) instead
   of being ignored silently.

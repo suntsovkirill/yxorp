@@ -18,18 +18,29 @@ It sits between your app and a target server, and you get to decide what happens
 npm i -g yxorp
 ```
 
+Requires Node.js 20.19+ or 22.12+.
+
 ---
 
 ## Quick Start
 
 **1. Create a config file** — `yxorp.json` in your project root:
 
+```bash
+yxorp init --target https://api.example.com
+```
+
+or by hand:
+
 ```json
 {
+  "$schema": "https://unpkg.com/yxorp/schema.json",
   "target": "https://api.example.com",
   "proxyPort": 3000
 }
 ```
+
+The `$schema` line gives you autocompletion and inline validation in VS Code and other editors that understand JSON Schema.
 
 **2. Run it:**
 
@@ -73,11 +84,25 @@ my-project/
 yxorp --port 4000 --target http://localhost:8080
 ```
 
-Run `yxorp --help` for the full list of flags.
+### All flags
+
+| Flag | Description |
+|------|-------------|
+| `--config <path>` | Config file to use |
+| `--port <port>` | Override `proxyPort` |
+| `--target <url>` | Override `target` |
+| `--quiet` | Log only warnings and errors |
+| `--verbose` | Also log debug details: which rule matched, where a request was routed, error stacks |
+| `--har <file>` | Save all traffic to a HAR file — see [Recording traffic](#recording-traffic) |
+| `--record <dir>` | Save proxied responses as mock files — see [Recording traffic](#recording-traffic) |
+| `-v`, `--version` | Print the version |
+| `-h`, `--help` | Print help |
+
+`yxorp init [--target <url>] [--port <port>]` creates a starter `yxorp.json` (with `$schema`) in the current directory.
 
 ### Config validation
 
-The config is checked at startup and on every hot-reload. Invalid values (a `target` that isn't an absolute `http(s)` URL, an unknown HTTP `method`, a `statusCode` outside 100–599, a malformed `path` pattern…) stop Yxorp from starting — or, on reload, keep the previous config — with a message pointing at the offending field. Unknown keys (usually typos like `mockRule` or `statuscode`) are reported as warnings.
+The config is checked at startup and on every hot-reload. Invalid values (a `target` that isn't an absolute `http(s)` URL, an unknown HTTP `method`, a `statusCode` outside 100–599, a malformed `path` pattern…) stop Yxorp from starting — or, on reload, keep the previous config — with a message pointing at the offending field. Unknown keys (usually typos like `mockRule` or `statuscode`) are reported as warnings. The same rules are published as a JSON Schema ([`schema.json`](schema.json)) for editors — reference it with `"$schema"`.
 
 ---
 
@@ -133,11 +158,68 @@ Verify the target's TLS certificate. Default: `false`, so targets with self-sign
 }
 ```
 
+### `cors`
+
+Lets a frontend on another origin (e.g. a dev server on `http://localhost:5173`) call the proxy directly. Yxorp answers CORS preflight requests (`OPTIONS` with `Access-Control-Request-Method`) itself, allowing exactly the method and headers the browser asks for, and adds CORS headers to every response — proxied, mocked, static, and errors. On proxied responses they **replace** the target's own CORS headers, which usually only allow the production origin.
+
+```json
+"cors": true
+```
+
+`true` allows any origin (echoed back, so cookies work too). For more control:
+
+```json
+"cors": {
+  "origin": ["http://localhost:5173"],
+  "credentials": true,
+  "maxAge": 600,
+  "exposeHeaders": ["x-total-count"]
+}
+```
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `origin` | any | Allowed origin or list of origins (`"*"` = any) |
+| `credentials` | `true` | Send `Access-Control-Allow-Credentials: true` |
+| `maxAge` | `600` | How long (seconds) the browser may cache a preflight |
+| `exposeHeaders` | — | Response headers the page's JavaScript may read |
+
+### `https`
+
+Serve the proxy over HTTPS (and WebSockets over WSS), e.g. when your app needs a secure context. Point it at a PEM key and certificate — [mkcert](https://github.com/FiloSottile/mkcert) makes a locally trusted pair in one command:
+
+```bash
+mkcert localhost
+```
+
+```json
+"https": {
+  "key": "./localhost-key.pem",
+  "cert": "./localhost.pem"
+}
+```
+
+Changing `https` (like `proxyPort`) needs a restart.
+
 ---
 
 ### Mock Rules (`mockRules`)
 
 Intercept a matching request **before** it reaches the target and respond immediately. The target server never sees it.
+
+Each rule declares where the response comes from — exactly one of `file`, `json`, `body`, or `script`.
+
+#### Inline — respond with JSON or text right from the config:
+
+```json
+{ "method": "GET", "path": "/api/flags", "json": { "newCheckout": true } }
+```
+
+```json
+{ "method": "GET", "path": "/health", "body": "ok" }
+```
+
+`json` responses get `content-type: application/json`, `body` responses `text/plain; charset=utf-8`.
 
 #### By file — respond with a JSON file:
 
@@ -171,11 +253,68 @@ module.exports = (req, res) => {
 };
 ```
 
-If you don't set `res.statusCode`, it defaults to Node's `200`. If you don't call `res.end()`, the response hangs — Yxorp won't do it for you. The only assist it provides: if the script finishes without sending headers, Yxorp sets `content-type: application/json` for you (handy for quick `res.end(JSON.stringify(...))` one-liners).
+If you don't set `res.statusCode`, it defaults to Node's `200` (or the rule's `statusCode`). If you don't call `res.end()`, the response hangs — Yxorp won't do it for you. The only assist it provides: if the script finishes without sending headers or setting a content type, Yxorp sets `content-type: application/json` for you (handy for quick `res.end(JSON.stringify(...))` one-liners).
+
+Besides the usual `req` properties, a mock script gets:
+
+| | |
+|---|---|
+| `req.mockRuleParams` | Path params, e.g. `{ id: '42' }` for `/api/users/:id` |
+| `req.query` | Parsed query string |
+| `await req.json()` | Request body parsed as JSON |
+| `await req.text()` | Request body as a string |
+| `await req.buffer()` | Request body as a `Buffer` |
+
+```javascript
+// ./mock/echo-user.js
+module.exports = async (req, res) => {
+  const user = await req.json();
+  res.statusCode = 201;
+  res.end(JSON.stringify({ id: 42, ...user }));
+};
+```
+
+The body is only read when you call one of these, so a script that reads the request stream itself (`req.on('data', ...)`) keeps working.
+
+Scripts can be CommonJS (`module.exports = ...`), ES modules (`export default ...` in a `.mjs` file, or `.js` in a `"type": "module"` package), or TypeScript (`.ts` — on Node.js 22.18+, which runs TypeScript natively).
 
 This mirrors how a real backend works on purpose — mock scripts are meant to **stand in for the target server**, so the same rules apply: you decide what the client receives, down to the last header.
 
 **Hot-reload is built-in** — edit the script file and the next request picks up changes automatically. No restart needed.
+
+#### Rule options
+
+These work on every mock rule (and on rewrite rules):
+
+| Option | Description |
+|--------|-------------|
+| `statusCode` | Response status (for scripts: the default, which the script can change) |
+| `headers` | Response headers, e.g. `{ "x-total-count": "42" }` — win over the defaults above |
+| `delay` | Milliseconds to wait before responding — simulate a slow backend, test your loading states |
+| `match` | Extra conditions on the query string and request headers — see below |
+| `disable` | Skip this rule |
+
+```json
+{
+  "method": "GET",
+  "path": "/api/orders",
+  "json": [],
+  "headers": { "x-total-count": "0" },
+  "delay": 1500
+}
+```
+
+#### Match on query and headers
+
+By default a rule matches on method and path alone. `match` narrows it down: every listed query param and request header must be present with exactly that value (header names are case-insensitive). Rules are checked top to bottom and the first match wins, so put the most specific ones first:
+
+```json
+"mockRules": [
+  { "method": "GET", "path": "/api/orders", "match": { "query": { "status": "empty" } }, "json": [] },
+  { "method": "GET", "path": "/api/me", "match": { "headers": { "x-role": "admin" } }, "file": "./mock/admin.json" },
+  { "method": "GET", "path": "/api/me", "file": "./mock/user.json" }
+]
+```
 
 #### Disable a rule:
 
@@ -196,7 +335,7 @@ Disabled rules are skipped, and the request passes through to the next matching 
 
 Let the request reach the target, then **modify the response** before it gets back to your app.
 
-#### By file — replace the entire response body:
+#### By file or inline — replace the entire response body:
 
 ```json
 {
@@ -206,6 +345,8 @@ Let the request reach the target, then **modify the response** before it gets ba
   "statusCode": 200
 }
 ```
+
+`json` and `body` work here too, as do `statusCode`, `headers` (which override the target's response headers), `delay`, and `match`. A `json` body sets `content-type: application/json`; `file` and `body` keep the target's content type unless you set one in `headers`.
 
 #### By script — transform the response body:
 
@@ -311,11 +452,10 @@ All rules use `path-to-regexp` v8 for URL matching — the same library used by 
 | `/api/users` | `/api/users` exactly | `{}` |
 | `/api/users/:id` | `/api/users/42`, `/api/users/abc` | `{ id: '42' }` |
 | `/api/users/:id/photos` | `/api/users/42/photos` | `{ id: '42' }` |
-
 | `/api/*rest` | `/api/users`, `/api/users/42/photos` | `{ rest: ['users', '42', 'photos'] }` |
 | `/api/v1{/*rest}` | `/api/v1` and everything under it | `{}` or `{ rest: [...] }` |
 
-Patterns match the URL **path** only — the query string is ignored for matching, so `/api/users` also matches `/api/users?page=2` (query params are available to mock scripts as `req.query`). A pattern without a wildcard matches the whole path exactly: `/api/v1` does not match `/api/v1/users`.
+Patterns match the URL **path** only — the query string is ignored for matching, so `/api/users` also matches `/api/users?page=2` (query params are available to mock scripts as `req.query`, and mock/rewrite rules can require specific ones with [`match`](#match-on-query-and-headers)). A pattern without a wildcard matches the whole path exactly: `/api/v1` does not match `/api/v1/users`.
 
 For more advanced patterns, see the [path-to-regexp documentation](https://github.com/pillarjs/path-to-regexp).
 
@@ -323,7 +463,7 @@ For more advanced patterns, see the [path-to-regexp documentation](https://githu
 
 ### A Note on Script Security
 
-Mock and rewrite scripts (`"script": "./path/to/file.js"`) are loaded with Node's `require()` and run with the same privileges as Yxorp itself — full filesystem, network, and process access, with no sandboxing.
+Mock and rewrite scripts (`"script": "./path/to/file.js"`) are loaded with Node's `require()`/`import()` and run with the same privileges as Yxorp itself — full filesystem, network, and process access, with no sandboxing.
 
 Only point Yxorp at config files (and the scripts they reference) that you trust, the same way you'd treat any other local Node script. Don't load a config from an untrusted source.
 
@@ -341,14 +481,54 @@ In the access log, streamed responses show a `stream` label; buffered pass-throu
 
 ---
 
+## Recording traffic
+
+### HAR export
+
+```bash
+yxorp --har traffic.har
+```
+
+Saves every request and response — headers, bodies (decoded from gzip/br), timings, status — to a [HAR](https://en.wikipedia.org/wiki/HAR_(file_format)) file. Open it in the browser devtools (Network panel → import) or any HAR viewer to inspect a session, or attach it to a bug report. The file is updated as traffic flows and completed on shutdown. Each entry carries a `_handledBy` field saying what answered it: `stream`/`proxy` (the target), `rewrite`, `mock`, `static`, or `cors`.
+
+### Record mode
+
+```bash
+yxorp --record ./recorded
+```
+
+Turns real API responses into mocks. Every response proxied from the target is saved as a file in `./recorded`, and `./recorded/recorded.json` holds ready-made `mockRules` that replay them:
+
+```json
+{
+  "mockRules": [
+    { "method": "GET", "path": "/api/orders", "match": { "query": { "page": "2" } }, "file": "./recorded/GET_api_orders_1a2b3c4d.json" },
+    { "method": "GET", "path": "/api/orders", "file": "./recorded/GET_api_orders.json" },
+    { "method": "GET", "path": "/api/users/42", "file": "./recorded/GET_api_users_42.json" }
+  ]
+}
+```
+
+Click through your app once with the backend up, copy the rules you want into your config, and you can work offline. Details:
+
+- One rule per method + path + query string (as `match.query`); a repeat request overwrites the earlier recording. Recording again into the same directory adds to what's there.
+- Bodies are saved decoded; non-200 status codes and content types the file extension doesn't imply are kept in the rule.
+- Only responses that came from the target unchanged are recorded — not mocked, static or rewritten ones — and not `OPTIONS`/`HEAD`, `204`/`304`, or event streams.
+
+Both flags capture bodies up to 10 MB per request; anything longer is cut off (and not recorded).
+
+---
+
 ## Full Example
 
 Here's a complete config showing all features in action:
 
 ```json
 {
+  "$schema": "https://unpkg.com/yxorp/schema.json",
   "target": "https://api.example.com",
   "proxyPort": 3000,
+  "cors": true,
 
   "staticRules": [
     {
@@ -377,6 +557,13 @@ Here's a complete config showing all features in action:
       "method": "POST",
       "path": "/api/users",
       "script": "./mock/create-user.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/orders",
+      "match": { "query": { "status": "empty" } },
+      "json": [],
+      "delay": 800
     }
   ],
 
@@ -400,11 +587,13 @@ Yxorp watches its config file at runtime. **Save the file — changes take effec
 
 This works for all config fields: mock rules, rewrite rules, remote rules, static rules, and headers. The proxy server keeps running and the new config is applied immediately.
 
-`--port`/`--target` CLI overrides keep winning over the file after every reload. The one field that can't change at runtime is `proxyPort`: Yxorp logs a warning and keeps listening on the current port until you restart it.
+`--port`/`--target` CLI overrides keep winning over the file after every reload. The fields that can't change at runtime are `proxyPort` and `https`: Yxorp logs a warning and keeps the current port and protocol until you restart it.
 
 ### Scripts
 
 Mock and rewrite scripts are reloaded on every request — **just save the file and the next request uses the new code**. No need to restart Yxorp.
+
+For CommonJS scripts this includes the local files they `require()` (a shared `./fixtures/users.js`, say); packages from `node_modules` stay cached. ES module and TypeScript scripts are reloaded when the script file itself changes — files *they* import are not reloaded (Node can't unload ES modules), so restart Yxorp after editing those.
 
 This is especially handy during development when you're iterating on API response shapes.
 
@@ -413,11 +602,18 @@ This is especially handy during development when you're iterating on API respons
 ## Development
 
 ```bash
-# Clone and run in dev mode (with auto-reload)
+# Run from source with auto-restart on changes (tsx)
 npm start
 
 # Run tests (integration tests spin up real servers)
 npm test
+
+# Tests with a coverage report (coverage/index.html)
+npm run test:coverage
+
+# Lint and typecheck
+npm run lint
+npm run typecheck
 
 # Build for production
 npm run build

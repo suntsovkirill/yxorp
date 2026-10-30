@@ -5,7 +5,7 @@ import { Config } from '../services/config.service';
 import { Middleware } from '../services/pipeline.service';
 import { LoggerService } from '../services/logger.service';
 import { describeError, sendErrorResponse } from '../utils/error-response';
-import { formatAccessLog } from '../utils/access-log';
+import { logAccess } from '../utils/access-log';
 
 export class ProxyMiddleware implements Middleware<[req: IncomingMessage, res: ServerResponse]> {
   constructor(
@@ -36,13 +36,17 @@ export class ProxyMiddleware implements Middleware<[req: IncomingMessage, res: S
       ...remoteTarget,
     };
 
+    if (remoteTarget) {
+      this.logger.debug(`${req.method} ${url} routed by remote rule to ${remoteTarget.target}`);
+    }
+
     this.httpProxy.web(req, res, options).catch((error: any) => {
       // httpxy rejects web()'s promise when the proxy has no 'error' listener
       // (e.g. target ECONNREFUSED/DNS failure) — without this, the client
       // would otherwise hang forever waiting for a response that never comes.
       this.logger.error(error);
       sendErrorResponse(res, 502, `cannot reach ${options.target}: ${describeError(error)}`);
-      this.logger.info(formatAccessLog('proxy', res.statusCode, req));
+      logAccess(this.logger, 'proxy', res.statusCode, req);
     });
   }
 }

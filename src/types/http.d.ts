@@ -9,5 +9,13 @@ declare module 'http' {
     query?: Record<string, any>;
     startTime?: number;
     wsStatusCode?: number;
+    // Access-log label of the middleware that answered the request (`stream`, `mock`, ...).
+    handledBy?: string;
+    // Request body, once read (by the mock-script body readers or traffic capture).
+    requestBody?: Buffer;
+    // Fetch-style body readers available to mock scripts.
+    buffer?: () => Promise<Buffer>;
+    text?: () => Promise<string>;
+    json?: () => Promise<any>;
   }
 }

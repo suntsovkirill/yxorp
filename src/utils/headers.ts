@@ -45,8 +45,42 @@ export function isHopByHopHeader(name: string, headers: IncomingHttpHeaders): bo
  * place rather than being re-derived per copy loop.
  */
 export function forwardResponseHeaders(proxyRes: IncomingMessage, res: ServerResponse): void {
+  // CORS headers yxorp already set (`cors` option) win over the target's.
+  const keepOwnCors = res.hasHeader('access-control-allow-origin');
+
   for (const key in proxyRes.headers) {
     if (isHopByHopHeader(key, proxyRes.headers)) continue;
+
+    const lower = key.toLowerCase();
+
+    if (keepOwnCors && lower.startsWith('access-control-')) continue;
+
+    if (lower === 'vary' && res.hasHeader('vary')) {
+      res.setHeader('vary', mergeVary(res.getHeader('vary'), proxyRes.headers.vary));
+      continue;
+    }
+
     res.setHeader(key, proxyRes.headers[key] as string | string[]);
   }
+}
+
+function mergeVary(...values: unknown[]): string {
+  const names = values
+    .flatMap(value => Array.isArray(value) ? value : [value])
+    .filter((value): value is string => typeof value === 'string')
+    .flatMap(value => value.split(','))
+    .map(value => value.trim())
+    .filter(Boolean);
+
+  const seen = new Set<string>();
+  const merged: string[] = [];
+
+  for (const name of names) {
+    if (!seen.has(name.toLowerCase())) {
+      seen.add(name.toLowerCase());
+      merged.push(name);
+    }
+  }
+
+  return merged.join(', ');
 }

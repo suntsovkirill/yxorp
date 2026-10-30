@@ -7,17 +7,18 @@ import path from 'path';
 const root = path.resolve(__dirname, '..');
 const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf-8'));
 
-/** Runs the CLI from source via ts-node — no build needed. */
+const tsxCli = require.resolve('tsx/cli');
+
+/** Runs the CLI from source via tsx — no build needed. */
 function runCli(args: string[], cwd = root) {
-  return spawnSync(process.execPath, ['-r', 'ts-node/register', path.join(root, 'src/index.ts'), ...args], {
+  return spawnSync(process.execPath, [tsxCli, path.join(root, 'src/index.ts'), ...args], {
     cwd,
     encoding: 'utf-8',
-    env: { ...process.env, TS_NODE_PROJECT: path.join(root, 'tsconfig.json') },
     timeout: 30000,
   });
 }
 
-// Each run starts ts-node, which takes a second or more — slower on Windows CI.
+// Each run starts tsx, which takes a moment — slower on Windows CI.
 describe('CLI', { timeout: 30000 }, () => {
   const tmpDirs: string[] = [];
 
@@ -48,5 +49,15 @@ describe('CLI', { timeout: 30000 }, () => {
     expect(result.status).toBe(1);
     expect(result.stderr).toContain('Invalid config:');
     expect(result.stderr).toContain('absolute http(s) URL');
+  });
+
+  it('creates a config with init', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'yxorp-cli-'));
+    tmpDirs.push(dir);
+
+    const result = runCli(['init', '--target', 'http://localhost:8080'], dir);
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('Created');
+    expect(JSON.parse(fs.readFileSync(path.join(dir, 'yxorp.json'), 'utf-8')).target).toBe('http://localhost:8080');
   });
 });

@@ -36,7 +36,7 @@ export class RemoteRulesMatcher {
     const { pathname, search } = splitUrl(url);
     const rules = this.config.get().remoteRules || [];
 
-    for (let rule of rules) {
+    for (const rule of rules) {
       if (rule.disable) {
         continue;
       }

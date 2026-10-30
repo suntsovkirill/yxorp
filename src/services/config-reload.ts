@@ -10,8 +10,9 @@ import { ConfigFile } from '../types/yxorp-config';
  * through the same steps as at startup — CLI overrides, then validation — so
  * `--port`/`--target` keep winning over the file after every save.
  *
- * The server can't move to a new port without a restart, so a changed
- * `proxyPort` is reported and ignored; the running port is kept in the config.
+ * The server can't move to a new port or switch HTTP/HTTPS without a restart,
+ * so a changed `proxyPort`/`https` is reported and ignored; the running values
+ * are kept in the config.
  */
 export function createConfigReloadHandler(
   appConfig: Config,
@@ -36,7 +37,13 @@ export function createConfigReloadHandler(
       logger.warn(`"proxyPort" changed to ${config.proxyPort} — restart yxorp to apply it; still listening on ${runningPort}`);
     }
 
-    appConfig.set(buildProxyConfig({ ...config, proxyPort: runningPort }));
+    const runningHttps = appConfig.get().https;
+
+    if (JSON.stringify(config.https) !== JSON.stringify(runningHttps)) {
+      logger.warn('"https" changed — restart yxorp to apply it; the server keeps its current protocol and certificate');
+    }
+
+    appConfig.set(buildProxyConfig({ ...config, proxyPort: runningPort, https: runningHttps }));
     logger.info('Config reloaded');
   };
 }

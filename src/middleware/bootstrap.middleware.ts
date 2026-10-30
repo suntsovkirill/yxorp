@@ -33,11 +33,12 @@ export class BootstrapMiddleware implements Middleware<[req: IncomingMessage, re
 
     // matchWithParams() finds the rule and decodes its path params in a single
     // pass — match() + params() back to back would compile/run path-to-regexp twice.
-    const matched = this.rewriteRulesMatcher.matchWithParams(req.url, req.method);
+    const matched = this.rewriteRulesMatcher.matchWithParams(req.url, req.method, req.headers);
 
     if (matched) {
       req.rewriteRule = matched.rule;
       req.rewriteRuleParams = matched.params || {};
+      this.logger.debug(`${req.method} ${req.url} matched rewrite rule ${matched.rule.method} ${matched.rule.path}`);
     }
   }
 
@@ -46,11 +47,12 @@ export class BootstrapMiddleware implements Middleware<[req: IncomingMessage, re
       return;
     }
 
-    const matched = this.mockRulesMatcher.matchWithParams(req.url, req.method);
+    const matched = this.mockRulesMatcher.matchWithParams(req.url, req.method, req.headers);
 
     if (matched) {
       req.mockRule = matched.rule;
       req.mockRuleParams = matched.params || {};
+      this.logger.debug(`${req.method} ${req.url} matched mock rule ${matched.rule.method} ${matched.rule.path}`);
     }
   }
 

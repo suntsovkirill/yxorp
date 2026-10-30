@@ -83,6 +83,19 @@ describe('config-validator', () => {
       .toContainEqual(expect.stringContaining('"secure"'));
   });
 
+  it('validates cors and https', () => {
+    const base = { target: 'https://api.example.com', proxyPort: 3000 };
+
+    expect(validateConfig({ ...base, cors: true })).toEqual([]);
+    expect(validateConfig({ ...base, cors: { origin: ['http://localhost:5173'], credentials: false, maxAge: 60, exposeHeaders: ['x-a'] } })).toEqual([]);
+    expect(validateConfig({ ...base, cors: 'yes' })).toContainEqual(expect.stringContaining('"cors" must be'));
+    expect(validateConfig({ ...base, cors: { origins: '*' } })).toContainEqual(expect.stringContaining('unknown key "origins"'));
+    expect(validateConfig({ ...base, cors: { maxAge: -5 } })).toContainEqual(expect.stringContaining('"cors.maxAge"'));
+
+    expect(validateConfig({ ...base, https: { key: './key.pem', cert: './cert.pem' } })).toEqual([]);
+    expect(validateConfig({ ...base, https: { key: './key.pem' } })).toContainEqual(expect.stringContaining('"https.cert"'));
+  });
+
   it('reports multiple errors at once', () => {
     const errors = validateConfig({ proxyPort: 'nope' });
     expect(errors.length).toBeGreaterThan(1);
@@ -103,9 +116,9 @@ describe('config-validator', () => {
     it('requires exactly one of file/script on mock/rewrite rules', () => {
       for (const key of ['mockRules', 'rewriteRules']) {
         expect(validateConfig({ ...base, [key]: [{ method: 'GET', path: '/x' }] }))
-          .toContainEqual(expect.stringContaining('must declare either "file" or "script"'));
+          .toContainEqual(expect.stringContaining('must declare one of "file", "script", "json" or "body"'));
         expect(validateConfig({ ...base, [key]: [{ method: 'GET', path: '/x', file: './a.json', script: './a.js' }] }))
-          .toContainEqual(expect.stringContaining('must declare only one of "file" or "script"'));
+          .toContainEqual(expect.stringContaining('must declare only one of "file", "script", "json" or "body", not "file" and "script"'));
       }
     });
 
@@ -138,6 +151,35 @@ describe('config-validator', () => {
         .toContainEqual(expect.stringContaining('must be an absolute URL'));
       expect(validateConfig({ ...base, remoteRules: [{ path: '/x/:id', target: 'http://localhost:4000/v2/:id' }] })).toEqual([]);
       expect(validateConfig({ ...base, remoteRules: [{ path: '/ws', target: 'ws://localhost:4000', ws: true }] })).toEqual([]);
+    });
+
+    it('accepts inline json/body sources and rejects invalid ones', () => {
+      for (const key of ['mockRules', 'rewriteRules']) {
+        expect(validateConfig({ ...base, [key]: [{ method: 'GET', path: '/x', json: { ok: true } }] })).toEqual([]);
+        expect(validateConfig({ ...base, [key]: [{ method: 'GET', path: '/x', json: null }] })).toEqual([]);
+        expect(validateConfig({ ...base, [key]: [{ method: 'GET', path: '/x', body: 'plain' }] })).toEqual([]);
+        expect(validateConfig({ ...base, [key]: [{ method: 'GET', path: '/x', body: { a: 1 } }] }))
+          .toContainEqual(expect.stringContaining('"body" that must be a string'));
+        expect(validateConfig({ ...base, [key]: [{ method: 'GET', path: '/x', json: {}, body: '' }] }))
+          .toContainEqual(expect.stringContaining('not "json" and "body"'));
+      }
+    });
+
+    it('validates delay, headers and match', () => {
+      const rule = { method: 'GET', path: '/x', json: {} };
+
+      expect(validateConfig({ ...base, mockRules: [{ ...rule, delay: 250, headers: { 'x-a': '1' }, match: { query: { page: '2' }, headers: { 'x-user': 'admin' } } }] }))
+        .toEqual([]);
+      expect(validateConfig({ ...base, mockRules: [{ ...rule, delay: -1 }] }))
+        .toContainEqual(expect.stringContaining('"delay" must be a non-negative integer'));
+      expect(validateConfig({ ...base, mockRules: [{ ...rule, headers: { 'x-a': 1 } }] }))
+        .toContainEqual(expect.stringContaining('"headers" value for "x-a" must be a string'));
+      expect(validateConfig({ ...base, mockRules: [{ ...rule, match: { query: { page: 2 } } }] }))
+        .toContainEqual(expect.stringContaining('"match.query" value for "page" must be a string'));
+      expect(validateConfig({ ...base, mockRules: [{ ...rule, match: { body: {} } }] }))
+        .toContainEqual(expect.stringContaining('"match" has an unknown key "body"'));
+      expect(validateConfig({ ...base, mockRules: [{ ...rule, match: [] }] }))
+        .toContainEqual(expect.stringContaining('"match" must be an object'));
     });
 
     it('rejects an unknown HTTP method', () => {

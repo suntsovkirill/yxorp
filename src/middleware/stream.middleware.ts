@@ -1,7 +1,7 @@
 import { IncomingMessage, ServerResponse } from 'http';
 import { Middleware } from '../services/pipeline.service';
 import { LoggerService } from '../services/logger.service';
-import { formatAccessLog } from '../utils/access-log';
+import { logAccess } from '../utils/access-log';
 import { forwardResponseHeaders } from '../utils/headers';
 import { describeError, sendErrorResponse } from '../utils/error-response';
 
@@ -67,7 +67,7 @@ export class StreamMiddleware implements Middleware<[proxyRes: IncomingMessage, 
       res.on('finish', () => {
         // Distinct 'stream' label (vs ProxyResMiddleware's 'proxy') so the
         // access log shows which pass-through responses were streamed.
-        this.logger.info(formatAccessLog('stream', res.statusCode, req));
+        logAccess(this.logger, 'stream', res.statusCode, req);
         done();
       });
 

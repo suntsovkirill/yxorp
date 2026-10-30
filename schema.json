@@ -1,0 +1,166 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://unpkg.com/yxorp/schema.json",
+  "title": "Yxorp config",
+  "description": "Config for yxorp, a local reverse proxy for rewriting, mocking, and debugging API responses.",
+  "type": "object",
+  "required": ["target", "proxyPort"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "target": {
+      "description": "The upstream server everything proxies to by default — an absolute http(s) URL.",
+      "type": "string",
+      "pattern": "^https?://",
+      "examples": ["https://api.example.com", "http://localhost:8080"]
+    },
+    "proxyPort": {
+      "description": "Port for the local proxy server.",
+      "oneOf": [
+        { "type": "integer", "minimum": 0, "maximum": 65535 },
+        { "type": "string", "pattern": "^[0-9]+$" }
+      ]
+    },
+    "proxyHeaders": {
+      "description": "Extra headers sent with every proxied request.",
+      "$ref": "#/definitions/stringMap"
+    },
+    "secure": {
+      "description": "Verify the target's TLS certificate (default false).",
+      "type": "boolean"
+    },
+    "changeOrigin": {
+      "description": "Rewrite the Host header to the target's host (default true).",
+      "type": "boolean"
+    },
+    "cors": {
+      "description": "Answer CORS preflights and add CORS headers to every response.",
+      "oneOf": [
+        { "type": "boolean" },
+        { "$ref": "#/definitions/corsOptions" }
+      ]
+    },
+    "https": {
+      "description": "Serve the proxy over HTTPS (and WSS). Requires a restart to change.",
+      "type": "object",
+      "required": ["key", "cert"],
+      "additionalProperties": false,
+      "properties": {
+        "key": { "description": "Path to the PEM private key.", "type": "string", "minLength": 1 },
+        "cert": { "description": "Path to the PEM certificate.", "type": "string", "minLength": 1 }
+      }
+    },
+    "remoteRules": {
+      "description": "Route matching paths to a different target.",
+      "type": "array",
+      "items": { "$ref": "#/definitions/remoteRule" }
+    },
+    "staticRules": {
+      "description": "Serve local files for a URL path prefix.",
+      "type": "array",
+      "items": { "$ref": "#/definitions/staticRule" }
+    },
+    "mockRules": {
+      "description": "Answer matching requests locally — the target never sees them.",
+      "type": "array",
+      "items": { "$ref": "#/definitions/responseRule" }
+    },
+    "rewriteRules": {
+      "description": "Let matching requests reach the target, then modify the response.",
+      "type": "array",
+      "items": { "$ref": "#/definitions/responseRule" }
+    }
+  },
+  "definitions": {
+    "stringMap": {
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    },
+    "path": {
+      "description": "path-to-regexp v8 pattern matched against the URL path (query string excluded), e.g. /api/users/:id or /api/*rest.",
+      "type": "string",
+      "minLength": 1
+    },
+    "corsOptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "origin": {
+          "description": "Allowed origin(s); \"*\" or omitted allows any origin.",
+          "oneOf": [
+            { "type": "string" },
+            { "type": "array", "items": { "type": "string" } }
+          ]
+        },
+        "credentials": { "description": "Send Access-Control-Allow-Credentials: true (default true).", "type": "boolean" },
+        "maxAge": { "description": "Preflight cache lifetime in seconds (default 600).", "type": "integer", "minimum": 0 },
+        "exposeHeaders": { "description": "Response headers the page's JavaScript may read.", "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "remoteRule": {
+      "type": "object",
+      "required": ["path", "target"],
+      "additionalProperties": false,
+      "properties": {
+        "path": { "$ref": "#/definitions/path" },
+        "target": {
+          "description": "Absolute URL. Without a path only the host changes; with a path (e.g. http://localhost:4000/v2/:id) it replaces the request path.",
+          "type": "string",
+          "pattern": "^(https?|wss?)://"
+        },
+        "ws": { "description": "Route WebSocket upgrades instead of HTTP requests.", "type": "boolean" },
+        "disable": { "type": "boolean" }
+      }
+    },
+    "staticRule": {
+      "type": "object",
+      "required": ["path", "directory"],
+      "additionalProperties": false,
+      "properties": {
+        "path": { "description": "URL path prefix, matched on whole segments.", "type": "string", "minLength": 1 },
+        "directory": { "description": "Local directory to serve files from.", "type": "string", "minLength": 1 },
+        "caseInsensitive": { "type": "boolean" },
+        "directoryIndex": { "description": "Default file for directory requests, e.g. index.html.", "type": "string" },
+        "disable": { "type": "boolean" }
+      }
+    },
+    "responseRule": {
+      "type": "object",
+      "required": ["method", "path"],
+      "additionalProperties": false,
+      "oneOf": [
+        { "required": ["file"] },
+        { "required": ["script"] },
+        { "required": ["json"] },
+        { "required": ["body"] }
+      ],
+      "properties": {
+        "method": {
+          "description": "HTTP method (case-insensitive).",
+          "type": "string",
+          "examples": ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"]
+        },
+        "path": { "$ref": "#/definitions/path" },
+        "match": {
+          "description": "Extra conditions: every listed query param / request header must have exactly this value.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "query": { "$ref": "#/definitions/stringMap" },
+            "headers": { "$ref": "#/definitions/stringMap" }
+          }
+        },
+        "file": { "description": "Respond with this file's contents.", "type": "string", "minLength": 1 },
+        "script": { "description": "Module exporting the handler (.js, .cjs, .mjs, or .ts on Node 22.18+).", "type": "string", "minLength": 1 },
+        "json": { "description": "Respond with this value as JSON." },
+        "body": { "description": "Respond with this text.", "type": "string" },
+        "statusCode": { "type": "integer", "minimum": 100, "maximum": 599 },
+        "headers": { "description": "Response headers to set.", "$ref": "#/definitions/stringMap" },
+        "delay": { "description": "Milliseconds to wait before responding.", "type": "integer", "minimum": 0 },
+        "disable": { "type": "boolean" }
+      }
+    }
+  }
+}

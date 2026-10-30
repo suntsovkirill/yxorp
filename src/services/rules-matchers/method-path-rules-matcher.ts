@@ -1,9 +1,12 @@
+import { IncomingHttpHeaders } from 'http';
 import { splitUrl } from '../../utils/url';
 import { matchPath } from '../../utils/path-pattern';
+import { RuleMatch } from '../../types/yxorp-config';
 
 export interface MethodPathRule {
   method: string;
   path: string;
+  match?: RuleMatch;
   disable?: boolean;
 }
 
@@ -16,8 +19,8 @@ export interface MethodPathRule {
 export abstract class MethodPathRulesMatcher<T extends MethodPathRule> {
   protected abstract getRules(): T[];
 
-  public match(url: string, method: string): T | undefined {
-    return this.find(url, method)?.rule;
+  public match(url: string, method: string, headers: IncomingHttpHeaders = {}): T | undefined {
+    return this.find(url, method, headers)?.rule;
   }
 
   public params(url: string, rule: T): Record<string, string> | undefined {
@@ -29,14 +32,24 @@ export abstract class MethodPathRulesMatcher<T extends MethodPathRule> {
    * compiling/running the path-to-regexp matcher twice (once via `match()`,
    * again via `params()`) for the same url+rule, as BootstrapMiddleware does.
    */
-  public matchWithParams(url: string, method: string): { rule: T; params: Record<string, string> } | undefined {
-    const found = this.find(url, method);
+  public matchWithParams(
+    url: string,
+    method: string,
+    headers: IncomingHttpHeaders = {},
+  ): { rule: T; params: Record<string, string> } | undefined {
+    const found = this.find(url, method, headers);
     return found ? { rule: found.rule, params: found.matchResult.params } : undefined;
   }
 
-  private find(url: string, method: string): { rule: T; matchResult: { params: Record<string, string> } } | undefined {
-    // Patterns describe paths only — a query string would make them miss.
-    const { pathname } = splitUrl(url);
+  private find(
+    url: string,
+    method: string,
+    headers: IncomingHttpHeaders,
+  ): { rule: T; matchResult: { params: Record<string, string> } } | undefined {
+    // Patterns describe paths only — a query string would make them miss. The
+    // query takes part only through a rule's `match.query` conditions.
+    const { pathname, search } = splitUrl(url);
+    let query: URLSearchParams | undefined;
 
     for (const rule of this.getRules()) {
       if (rule.disable) {
@@ -49,9 +62,42 @@ export abstract class MethodPathRulesMatcher<T extends MethodPathRule> {
 
       const matchResult = matchPath(rule.path, pathname);
 
-      if (matchResult) {
-        return { rule, matchResult };
+      if (!matchResult) {
+        continue;
       }
+
+      if (rule.match) {
+        query ??= new URLSearchParams(search);
+
+        if (!matchesConditions(rule.match, query, headers)) {
+          continue;
+        }
+      }
+
+      return { rule, matchResult };
     }
   }
+}
+
+/**
+ * Every `match.query` param and `match.headers` header must be present with
+ * exactly the given value (for a repeated param/header, any of its values).
+ */
+function matchesConditions(match: RuleMatch, query: URLSearchParams, headers: IncomingHttpHeaders): boolean {
+  for (const [name, expected] of Object.entries(match.query || {})) {
+    if (!query.getAll(name).includes(expected)) {
+      return false;
+    }
+  }
+
+  for (const [name, expected] of Object.entries(match.headers || {})) {
+    const actual = headers[name.toLowerCase()];
+    const values = Array.isArray(actual) ? actual : actual === undefined ? [] : [actual];
+
+    if (!values.includes(expected)) {
+      return false;
+    }
+  }
+
+  return true;
 }
