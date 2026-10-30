@@ -15,11 +15,13 @@ export const KNOWN_TOP_LEVEL_KEYS = new Set([
   '$schema',
   'target',
   'proxyPort',
+  'host',
   'proxyHeaders',
   'secure',
   'changeOrigin',
   'cors',
   'https',
+  'include',
   ...RULE_ARRAYS,
 ]);
 
@@ -60,6 +62,10 @@ export function validateConfig(config: any): string[] {
 
   if (!isValidPort) {
     errors.push(`"proxyPort" is required and must be a number or numeric string between 0 and ${MAX_PORT} (e.g. 3000)`);
+  }
+
+  if (config.host !== undefined && (typeof config.host !== 'string' || !config.host.trim())) {
+    errors.push('"host" must be a non-empty string (e.g. "127.0.0.1" or "0.0.0.0")');
   }
 
   if (config.proxyHeaders !== undefined) {

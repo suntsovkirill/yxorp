@@ -3,7 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const entry = path.join(__dirname, '../dist/index.js');
+const entry = path.join(__dirname, '../dist/cli.js');
 
 // Check for the build output explicitly rather than catching MODULE_NOT_FOUND
 // from require() — that error also fires for any module missing *inside* the

@@ -38,12 +38,17 @@ export function createConfigReloadHandler(
     }
 
     const runningHttps = appConfig.get().https;
+    const runningHost = appConfig.get().host;
+
+    if ((config.host ?? '') !== (runningHost ?? '')) {
+      logger.warn(`"host" changed to ${config.host ?? '(default)'} — restart yxorp to apply it`);
+    }
 
     if (JSON.stringify(config.https) !== JSON.stringify(runningHttps)) {
       logger.warn('"https" changed — restart yxorp to apply it; the server keeps its current protocol and certificate');
     }
 
-    appConfig.set(buildProxyConfig({ ...config, proxyPort: runningPort, https: runningHttps }));
+    appConfig.set(buildProxyConfig({ ...config, proxyPort: runningPort, https: runningHttps, host: runningHost }, appConfig.get().configDir));
     logger.info('Config reloaded');
   };
 }

@@ -1,10 +1,16 @@
 export interface YxorpConfig extends ConfigFile {
   proxyOptions: Record<string, any>;
+  // Base directory for every relative path in the config (rule files,
+  // scripts, static directories, TLS files) — the config file's directory.
+  configDir: string;
 }
 
 export interface ConfigFile {
   target: string;
   proxyPort: string | number;
+  // Interface to listen on (default 127.0.0.1 — only this machine). Use
+  // "0.0.0.0" to accept connections from other devices.
+  host?: string;
   proxyHeaders?: Record<string, string>;
   // Verify the target's TLS certificate (default false — local dev targets
   // often use self-signed certificates).
@@ -19,6 +25,10 @@ export interface ConfigFile {
   staticRules?: StaticRule[];
   mockRules?: MockRule[];
   rewriteRules?: RewriteRule[];
+  // Change requests on their way to the target.
+  requestRules?: RequestRule[];
+  // More config files (rule lists only) merged after this one's rules.
+  include?: string[];
 }
 
 export interface CorsOptions {
@@ -94,3 +104,19 @@ export type RewriteJsonRule = ResponseRuleBase & JsonSource;
 export type RewriteBodyRule = ResponseRuleBase & BodySource;
 
 export type RewriteRule = RewriteFileRule | RewriteScriptRule | RewriteJsonRule | RewriteBodyRule;
+
+/**
+ * Changes a matching request before it's proxied to the target. Headers and
+ * query params are set, or removed with `null`; `json`/`body` replace the
+ * request body.
+ */
+export interface RequestRule {
+  method: string;
+  path: string;
+  match?: RuleMatch;
+  headers?: Record<string, string | null>;
+  query?: Record<string, string | null>;
+  json?: unknown;
+  body?: string;
+  disable?: boolean;
+}

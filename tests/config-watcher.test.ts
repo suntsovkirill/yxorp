@@ -2,7 +2,7 @@ import { describe, it, afterEach, expect } from 'vitest';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { watchConfig } from '../src/services/config-watcher';
+import { ConfigWatcher, watchConfig } from '../src/services/config-watcher';
 import { ConfigFile } from '../src/types/yxorp-config';
 
 // fs.watch behaviour is platform-dependent and can be unreliable (especially on Windows).
@@ -16,7 +16,7 @@ function softExpect(fn: () => void): void {
 }
 
 describe('config-watcher', () => {
-  const watchers: fs.FSWatcher[] = [];
+  const watchers: ConfigWatcher[] = [];
   const tmpFiles: string[] = [];
 
   afterEach(() => {

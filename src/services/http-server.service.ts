@@ -7,6 +7,7 @@ import { describeError, sendErrorResponse } from '../utils/error-response';
 export class HttpServer {
   public readonly use: Pipeline<[IncomingMessage, ServerResponse]>['use'];
   public readonly on: Server['on'];
+  public readonly once: Server['once'];
   public readonly addListener: Server['addListener'];
   public readonly removeListener: Server['removeListener'];
   public readonly listen: Server['listen'];
@@ -36,6 +37,7 @@ export class HttpServer {
 
     this.use = this.pipeline.use.bind(this.pipeline);
     this.on = this.server.on.bind(this.server);
+    this.once = this.server.once.bind(this.server);
     this.addListener = this.server.addListener.bind(this.server);
     this.removeListener = this.server.removeListener.bind(this.server);
     this.listen = this.server.listen.bind(this.server);

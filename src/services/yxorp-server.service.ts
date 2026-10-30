@@ -43,7 +43,7 @@ export function createServer(
   proxyPipeline.use(
     new StreamMiddleware(logger),
     new RawBodyMiddleware(logger),
-    new RewriteMiddleware(logger),
+    new RewriteMiddleware(config, logger),
     new ProxyResMiddleware(logger),
   );
 
@@ -60,12 +60,12 @@ export function createServer(
     new CorsMiddleware(config, logger),
     new StaticMiddleware(config, logger),
     new BootstrapMiddleware(rewriteRulesMatcher, mockRulesMatcher, logger),
-    new MockMiddleware(logger),
+    new MockMiddleware(config, logger),
     new ProxyMiddleware(proxy, remoteRulesMatcher, config, logger),
   );
 
   // 4. HttpServer wraps the server pipeline
-  const server = new HttpServer(serverPipeline, logger, readTls(config.get().https));
+  const server = new HttpServer(serverPipeline, logger, readTls(config.get().https, config.get().configDir));
 
   // 5. Attach proxy pipeline to proxyRes event
   proxy.on('proxyRes', (proxyRes: IncomingMessage, req: IncomingMessage, res: ServerResponse) => {
@@ -139,14 +139,14 @@ export function createServer(
  * Reads the `https` key/certificate files (relative to the config directory).
  * Throws with the offending path if one can't be read — the server can't start.
  */
-function readTls(options: HttpsOptions | undefined): { key: Buffer; cert: Buffer } | undefined {
+function readTls(options: HttpsOptions | undefined, configDir: string): { key: Buffer; cert: Buffer } | undefined {
   if (!options) {
     return undefined;
   }
 
   const read = (field: 'key' | 'cert') => {
     try {
-      return fs.readFileSync(path.resolve(options[field]));
+      return fs.readFileSync(path.resolve(configDir, options[field]));
     } catch (e) {
       throw new Error(`Cannot read "https.${field}" file "${options[field]}": ${describeError(e)}`, { cause: e });
     }

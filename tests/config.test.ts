@@ -10,7 +10,7 @@ describe('Config', () => {
 
   it('returns the config after set()', () => {
     const config = new Config();
-    const value: YxorpConfig = { target: 'http://example.com', proxyPort: 3000, proxyOptions: {} };
+    const value: YxorpConfig = { target: 'http://example.com', proxyPort: 3000, proxyOptions: {}, configDir: '/tmp' };
 
     config.set(value);
 

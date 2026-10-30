@@ -2,6 +2,7 @@ import { IncomingMessage, ServerResponse } from 'http';
 import { SUPPORTED_ENCODING, encodeBuffer, decodeBuffer } from 'http-encoding';
 import path from 'path';
 import { Middleware } from '../services/pipeline.service';
+import { Config } from '../services/config.service';
 import { LoggerService } from '../services/logger.service';
 import { logAccess } from '../utils/access-log';
 import { loadScript } from '../services/script-loader';
@@ -10,6 +11,7 @@ import { readRuleBody } from '../utils/rule-body';
 
 export class RewriteMiddleware implements Middleware<[proxyRes: IncomingMessage, req: IncomingMessage, res: ServerResponse]> {
   constructor(
+    private config: Config,
     private logger: LoggerService,
   ) {
   }
@@ -29,7 +31,7 @@ export class RewriteMiddleware implements Middleware<[proxyRes: IncomingMessage,
       const response: Buffer = proxyRes.rawBody || Buffer.from('');
 
       if ('script' in rewriteRule) {
-        const fullPath = path.resolve(rewriteRule.script);
+        const fullPath = path.resolve(this.config.get().configDir, rewriteRule.script);
         const handler = await loadScript(fullPath);
 
         if (typeof handler !== 'function') {
@@ -48,7 +50,7 @@ export class RewriteMiddleware implements Middleware<[proxyRes: IncomingMessage,
           }
         }
       } else {
-        const source = await readRuleBody(rewriteRule);
+        const source = await readRuleBody(rewriteRule, this.config.get().configDir);
 
         if (source) {
           proxyRes.rawBody = await encodeBuffer(source.body, encoding);

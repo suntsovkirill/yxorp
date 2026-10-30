@@ -1,6 +1,7 @@
 import { ServerResponse, IncomingMessage } from 'http';
 import path from 'path';
 import { Middleware } from '../services/pipeline.service';
+import { Config } from '../services/config.service';
 import { LoggerService } from '../services/logger.service';
 import { logAccess } from '../utils/access-log';
 import { loadScript } from '../services/script-loader';
@@ -10,6 +11,7 @@ import { readRuleBody } from '../utils/rule-body';
 
 export class MockMiddleware implements Middleware<[req: IncomingMessage, res: ServerResponse]> {
   constructor(
+    private config: Config,
     private logger: LoggerService,
   ) {
   }
@@ -26,7 +28,7 @@ export class MockMiddleware implements Middleware<[req: IncomingMessage, res: Se
       await delay(mockRule.delay);
 
       if ('script' in mockRule) {
-        const fullPath = path.resolve(mockRule.script);
+        const fullPath = path.resolve(this.config.get().configDir, mockRule.script);
         const handler = await loadScript(fullPath);
 
         if (typeof handler !== 'function') {
@@ -60,7 +62,7 @@ export class MockMiddleware implements Middleware<[req: IncomingMessage, res: Se
         return;
       }
 
-      const source = await readRuleBody(mockRule);
+      const source = await readRuleBody(mockRule, this.config.get().configDir);
 
       if (source) {
         res.statusCode = mockRule.statusCode || res.statusCode;

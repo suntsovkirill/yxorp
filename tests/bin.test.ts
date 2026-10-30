@@ -17,7 +17,7 @@ function createPackage(distIndex?: string): string {
 
   if (distIndex !== undefined) {
     fs.mkdirSync(path.join(root, 'dist'));
-    fs.writeFileSync(path.join(root, 'dist', 'index.js'), distIndex);
+    fs.writeFileSync(path.join(root, 'dist', 'cli.js'), distIndex);
   }
 
   return root;

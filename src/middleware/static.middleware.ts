@@ -71,7 +71,7 @@ export class StaticMiddleware implements Middleware<[req: IncomingMessage, res: 
    * than enumerating the entire tree just to find one file.
    */
   private async resolveFile(rule: StaticRule, urlPath: string): Promise<string | undefined> {
-    const directory = path.resolve(rule.directory);
+    const directory = path.resolve(this.config.get().configDir, rule.directory);
     const relativeUrlPath = urlPath.slice(rule.path.length);
 
     const pathname = path.extname(relativeUrlPath)

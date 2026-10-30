@@ -26,22 +26,28 @@ export function getArgValue(argv: string[], flag: string): string | undefined {
   return undefined;
 }
 
+// CLI flag → the config key it overrides.
+const OVERRIDES: Record<string, 'proxyPort' | 'target' | 'host'> = {
+  '--port': 'proxyPort',
+  '--target': 'target',
+  '--host': 'host',
+};
+
 /**
- * Applies `--port`/`--target` CLI flags on top of a resolved config, without
- * touching the config file. CLI flags win over config values. Returns a new
- * object — the input config is left untouched.
+ * Applies `--port`/`--target`/`--host` CLI flags on top of a resolved config,
+ * without touching the config file. CLI flags win over config values. Returns
+ * a new object — the input config is left untouched.
  */
 export function applyCliOverrides(config: ConfigFile, argv: string[]): ConfigFile {
-  const portOverride = getArgValue(argv, '--port');
-  const targetOverride = getArgValue(argv, '--target');
+  const overrides: Partial<ConfigFile> = {};
 
-  if (portOverride === undefined && targetOverride === undefined) {
-    return config;
+  for (const [flag, key] of Object.entries(OVERRIDES)) {
+    const value = getArgValue(argv, flag);
+
+    if (value !== undefined) {
+      overrides[key] = value;
+    }
   }
 
-  return {
-    ...config,
-    ...(portOverride !== undefined ? { proxyPort: portOverride } : {}),
-    ...(targetOverride !== undefined ? { target: targetOverride } : {}),
-  };
+  return Object.keys(overrides).length ? { ...config, ...overrides } : config;
 }

@@ -10,9 +10,10 @@ import { BodySource, FileSource, JsonSource, ScriptSource } from '../types/yxorp
  */
 export async function readRuleBody(
   rule: FileSource | ScriptSource | JsonSource | BodySource,
+  configDir: string,
 ): Promise<{ body: Buffer; contentType?: string } | undefined> {
   if ('file' in rule) {
-    const filePath = path.resolve(rule.file);
+    const filePath = path.resolve(configDir, rule.file);
     return { body: await fs.readFile(filePath), contentType: mime.getType(filePath) ?? undefined };
   }
 

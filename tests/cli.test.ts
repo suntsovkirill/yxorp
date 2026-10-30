@@ -11,7 +11,7 @@ const tsxCli = require.resolve('tsx/cli');
 
 /** Runs the CLI from source via tsx — no build needed. */
 function runCli(args: string[], cwd = root) {
-  return spawnSync(process.execPath, [tsxCli, path.join(root, 'src/index.ts'), ...args], {
+  return spawnSync(process.execPath, [tsxCli, path.join(root, 'src/cli.ts'), ...args], {
     cwd,
     encoding: 'utf-8',
     timeout: 30000,
