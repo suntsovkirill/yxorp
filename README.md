@@ -217,13 +217,23 @@ Route specific paths to a **different target server** instead of the default one
 {
   "remoteRules": [
     {
-      "path": "/api/legacy/:rest",
+      "path": "/api/legacy/*rest",
       "target": "http://localhost:4000",
       "ws": false
     }
   ]
 }
 ```
+
+How the request path is built depends on whether `target` has a path:
+
+| `path` | `target` | Request | Sent to |
+|--------|----------|---------|---------|
+| `/api/legacy/*rest` | `http://localhost:4000` | `/api/legacy/users?page=2` | `http://localhost:4000/api/legacy/users?page=2` — only the host changes |
+| `/legacy/:id` | `http://localhost:4000/v2/items/:id` | `/legacy/5?page=2` | `http://localhost:4000/v2/items/5?page=2` — the path is rebuilt from the params |
+| `/legacy/*rest` | `http://localhost:4000/v2/*rest` | `/legacy/a/b` | `http://localhost:4000/v2/a/b` |
+
+The request's query string is always carried over (and appended to any query string in `target`).
 
 The `ws` option enables WebSocket proxying for that route.
 
@@ -250,7 +260,7 @@ Options:
 
 | Option | Type | Description |
 |--------|------|-------------|
-| `path` | string | URL path prefix to match |
+| `path` | string | URL path prefix to match, on whole segments (`/assets` matches `/assets/logo.svg`, not `/assets-old/logo.svg`) |
 | `directory` | string | Local directory to serve files from |
 | `caseInsensitive` | boolean | Ignore filename case when matching |
 | `directoryIndex` | string | Default file for directory requests (e.g. `index.html`) |
@@ -267,6 +277,11 @@ All rules use `path-to-regexp` v8 for URL matching — the same library used by 
 | `/api/users` | `/api/users` exactly | `{}` |
 | `/api/users/:id` | `/api/users/42`, `/api/users/abc` | `{ id: '42' }` |
 | `/api/users/:id/photos` | `/api/users/42/photos` | `{ id: '42' }` |
+
+| `/api/*rest` | `/api/users`, `/api/users/42/photos` | `{ rest: ['users', '42', 'photos'] }` |
+| `/api/v1{/*rest}` | `/api/v1` and everything under it | `{}` or `{ rest: [...] }` |
+
+Patterns match the URL **path** only — the query string is ignored for matching, so `/api/users` also matches `/api/users?page=2` (query params are available to mock scripts as `req.query`). A pattern without a wildcard matches the whole path exactly: `/api/v1` does not match `/api/v1/users`.
 
 For more advanced patterns, see the [path-to-regexp documentation](https://github.com/pillarjs/path-to-regexp).
 
@@ -312,7 +327,7 @@ Here's a complete config showing all features in action:
 
   "remoteRules": [
     {
-      "path": "/api/v1",
+      "path": "/api/v1{/*rest}",
       "target": "http://localhost:4000"
     }
   ],
@@ -350,6 +365,8 @@ Here's a complete config showing all features in action:
 Yxorp watches its config file at runtime. **Save the file — changes take effect on the next request.** No restart needed.
 
 This works for all config fields: mock rules, rewrite rules, remote rules, static rules, and headers. The proxy server keeps running and the new config is applied immediately.
+
+`--port`/`--target` CLI overrides keep winning over the file after every reload. The one field that can't change at runtime is `proxyPort`: Yxorp logs a warning and keeps listening on the current port until you restart it.
 
 ### Scripts
 

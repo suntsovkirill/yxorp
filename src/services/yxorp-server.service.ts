@@ -2,7 +2,7 @@ import { IncomingMessage, ServerResponse } from 'http';
 import { Duplex } from 'stream';
 import { HttpServer } from './http-server.service';
 import { HttpProxy } from './http-proxy.service';
-import { RemoteRulesMatcher } from './rules-matchers/remote-rules-matcher.service';
+import { RemoteRulesMatcher, RemoteTarget } from './rules-matchers/remote-rules-matcher.service';
 import { RewriteRulesMatcher } from './rules-matchers/rewrite-rules-matcher.service';
 import { MockRulesMatcher } from './rules-matchers/mock-rules-matcher.service';
 import { Config } from './config.service';
@@ -71,13 +71,10 @@ export function createServer(
     const url = req.url || '';
     const proxyOptions = config.get().proxyOptions;
 
-    let target: string | undefined;
+    let remoteTarget: RemoteTarget | undefined;
 
     try {
-      const remoteRule = remoteRulesMatcher.match(url, true);
-      target = remoteRule
-        ? remoteRulesMatcher.toPath(url, remoteRule)
-        : undefined;
+      remoteTarget = remoteRulesMatcher.resolve(url, true);
     } catch (e) {
       // A malformed `remoteRules[].path` pattern would otherwise throw
       // synchronously here on every upgrade — fall back to the default target.
@@ -86,8 +83,7 @@ export function createServer(
 
     const options = {
       ...proxyOptions,
-      prependPath: !target,
-      target: target || proxyOptions.target,
+      ...remoteTarget,
     };
 
     proxy.ws(req, socket, options, head).catch((error: any) => logger.info(error));

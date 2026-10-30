@@ -55,11 +55,50 @@ describe('Static file serving', () => {
     expect(res.body).toContain('target:');
   });
 
+  it('matches the path prefix on whole segments only', async () => {
+    // `/static` must not capture `/statichello.html` — a plain string prefix
+    // check would strip `/static` and serve `hello.html` from the directory.
+    const res = await fetchYxorp(yxorp.port, '/statichello.html');
+    expect(res.body).toBe('target: /statichello.html');
+  });
+
+  it('serves files when the query string is present', async () => {
+    const res = await fetchYxorp(yxorp.port, '/static/hello.html?v=1');
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toContain('Hello from static');
+  });
+
   it('falls through to proxy for non-matching file in static path', async () => {
     const res = await fetchYxorp(yxorp.port, '/api/user');
     expect(res.statusCode).toBe(200);
     const data = JSON.parse(res.body);
     expect(data.name).toBe('Alice');
+  });
+});
+
+describe('Static disabled rule', () => {
+  let disabledYxorp: { port: number; stop: () => Promise<void> };
+
+  beforeAll(async () => {
+    disabledYxorp = await createYxorp({
+      target: `http://localhost:${targetPort}`,
+      staticRules: [
+        {
+          path: '/static',
+          directory: fixtures,
+          disable: true,
+        },
+      ],
+    });
+  });
+
+  afterAll(async () => {
+    await disabledYxorp.stop();
+  });
+
+  it('skips a disabled rule and passes the request through to the target', async () => {
+    const res = await fetchYxorp(disabledYxorp.port, '/static/hello.html');
+    expect(res.body).toBe('target: /static/hello.html');
   });
 });
 

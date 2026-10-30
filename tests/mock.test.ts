@@ -157,3 +157,33 @@ describe('Mock disabled rule', () => {
     expect(JSON.parse(res.body)).toEqual({ id: 1, name: 'Alice' });
   });
 });
+
+describe('Mock with query string', () => {
+  let yxorp: YxorpInstance;
+
+  beforeAll(async () => {
+    yxorp = await createYxorp({
+      target: `http://localhost:${targetPort}`,
+      mockRules: [
+        {
+          method: 'GET',
+          path: '/api/users/:id',
+          script: path.join(fixtures, 'mock-params.js'),
+        },
+      ],
+    });
+  });
+
+  afterAll(async () => {
+    await yxorp.stop();
+  });
+
+  it('matches the rule by path, ignoring the query string', async () => {
+    const res = await fetchYxorp(yxorp.port, '/api/users/7?page=2&sort=name');
+    expect(res.statusCode).toBe(200);
+    expect(JSON.parse(res.body)).toEqual({
+      params: { id: '7' },
+      query: { page: '2', sort: 'name' },
+    });
+  });
+});

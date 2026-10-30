@@ -9,6 +9,30 @@ config schema, CLI flags, or mock/rewrite script API.
 
 ## [Unreleased]
 
+### Fixed
+- Mock, rewrite, and remote rules now match the URL path only, so a request
+  with a query string (`/api/users?page=2`) no longer misses its rule, and the
+  query string no longer leaks into path params.
+- Remote rules whose `target` has a path (`http://host/v2/:id`) now send the
+  request to that path with the request's query string appended. Previously the
+  original request path was appended after it (`/v2/5/legacy/5`) and the query
+  string was captured inside the params.
+- `staticRules[].disable` is honored — disabled static rules used to keep
+  serving files.
+- Static rule `path` prefixes match on whole path segments: `/assets` no longer
+  captures `/assets-old/...` or `/assetsfile.js`.
+- `--port`/`--target` CLI overrides are re-applied on config hot-reload instead
+  of being silently replaced by the file's values after the first save.
+
+### Changed
+- Changing `proxyPort` in the config file at runtime now logs a warning that a
+  restart is needed (the server keeps listening on the original port) instead
+  of being ignored silently.
+
+### Documentation
+- Fixed the remote-rule examples in the README: a pattern without a wildcard
+  (`/api/v1`) matches only that exact path — use `/api/v1{/*rest}` for a prefix.
+
 ## [0.3.0] - 2026-06-12
 
 ### Added

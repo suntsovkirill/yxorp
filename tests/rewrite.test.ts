@@ -42,6 +42,12 @@ describe('Rewrite by file', () => {
     const data = JSON.parse(res.body);
     expect(data).toEqual({ mocked: true, source: 'file', value: 42 });
   });
+
+  it('matches the rule by path, ignoring the query string', async () => {
+    const res = await fetchYxorp(yxorp.port, '/api/user?fields=name');
+    expect(res.statusCode).toBe(200);
+    expect(JSON.parse(res.body)).toEqual({ mocked: true, source: 'file', value: 42 });
+  });
 });
 
 describe('Rewrite by script', () => {

@@ -1,6 +1,6 @@
 import { IncomingMessage, ServerResponse } from 'http';
 import { HttpProxy } from '../services/http-proxy.service';
-import { RemoteRulesMatcher } from '../services/rules-matchers/remote-rules-matcher.service';
+import { RemoteRulesMatcher, RemoteTarget } from '../services/rules-matchers/remote-rules-matcher.service';
 import { Config } from '../services/config.service';
 import { Middleware } from '../services/pipeline.service';
 import { LoggerService } from '../services/logger.service';
@@ -19,13 +19,10 @@ export class ProxyMiddleware implements Middleware<[req: IncomingMessage, res: S
 
     const proxyOptions = this.config.get().proxyOptions;
 
-    let target: string | undefined;
+    let remoteTarget: RemoteTarget | undefined;
 
     try {
-      const remoteRule = this.remoteRulesMatcher.match(url);
-      target = remoteRule
-        ? this.remoteRulesMatcher.toPath(url, remoteRule)
-        : undefined;
+      remoteTarget = this.remoteRulesMatcher.resolve(url);
     } catch (e) {
       // A malformed `remoteRules[].path` pattern would otherwise throw
       // synchronously here on every request — fall back to the default target.
@@ -34,8 +31,7 @@ export class ProxyMiddleware implements Middleware<[req: IncomingMessage, res: S
 
     const options = {
       ...proxyOptions,
-      prependPath: !target,
-      target: target || proxyOptions.target,
+      ...remoteTarget,
     };
 
     this.httpProxy.web(req, res, options).catch((error: any) => {

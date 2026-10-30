@@ -6,11 +6,13 @@ import { RemoteRulesMatcher } from './services/rules-matchers/remote-rules-match
 import { RewriteRulesMatcher } from './services/rules-matchers/rewrite-rules-matcher.service';
 import { MockRulesMatcher } from './services/rules-matchers/mock-rules-matcher.service';
 import { createServer } from './services/yxorp-server.service';
-import { ConfigFile, YxorpConfig } from './types/yxorp-config';
+import { ConfigFile } from './types/yxorp-config';
 import { resolveConfig } from './services/config-resolver';
 import { watchConfig } from './services/config-watcher';
 import { validateConfig } from './services/config-validator';
 import { applyCliOverrides } from './services/cli-overrides';
+import { buildProxyConfig } from './services/proxy-config';
+import { createConfigReloadHandler } from './services/config-reload';
 
 // --- Version flag ---
 if (process.argv.includes('--version') || process.argv.includes('-v')) {
@@ -51,23 +53,6 @@ if (configDir !== process.cwd()) {
   process.chdir(configDir);
 }
 
-function buildProxyConfig(cfg: ConfigFile): YxorpConfig {
-  const proxyOptions: Record<string, any> = {
-    target: cfg.target,
-    changeOrigin: true,
-    followRedirects: true,
-    secure: false,
-    ws: true,
-    selfHandleResponse: true,
-  };
-
-  if (cfg.proxyHeaders) {
-    proxyOptions.headers = cfg.proxyHeaders;
-  }
-
-  return { ...cfg, proxyOptions };
-}
-
 // Manual composition — no DI container
 const logger = new LoggerService();
 const appConfig = new Config();
@@ -92,18 +77,7 @@ listen(config.proxyPort, () => {
 // --- Config hot-reload ---
 const configWatcher = watchConfig(
   configPath,
-  (newConfig) => {
-    const errors = validateConfig(newConfig);
-
-    if (errors.length) {
-      logger.error('Config reload skipped — invalid config:');
-      errors.forEach(err => logger.error(`  - ${err}`));
-      return;
-    }
-
-    appConfig.set(buildProxyConfig(newConfig));
-    logger.info('Config reloaded');
-  },
+  createConfigReloadHandler(appConfig, logger, process.argv),
   (e: any) => logger.error(`Config reload failed: ${e.message || e}`),
 );
 

@@ -22,9 +22,9 @@ export class StaticMiddleware implements Middleware<[req: IncomingMessage, res: 
       const url = new URL(req.url || '', 'http://fake.com');
       const urlPath = url.pathname;
 
-      const currentStaticRule = staticRules.filter((staticRule) => {
-        return urlPath.startsWith(staticRule.path);
-      })[0];
+      const currentStaticRule = staticRules.find((staticRule) => {
+        return !staticRule.disable && matchesPathPrefix(urlPath, staticRule.path);
+      });
 
       if (!currentStaticRule) {
         next();
@@ -149,4 +149,16 @@ export class StaticMiddleware implements Middleware<[req: IncomingMessage, res: 
       return undefined;
     }
   }
+}
+
+/**
+ * Prefix match on whole path segments — `/assets` matches `/assets` and
+ * `/assets/logo.svg`, but not `/assets-old/logo.svg`.
+ */
+function matchesPathPrefix(urlPath: string, prefix: string): boolean {
+  if (!urlPath.startsWith(prefix)) {
+    return false;
+  }
+
+  return prefix.endsWith('/') || urlPath.length === prefix.length || urlPath[prefix.length] === '/';
 }

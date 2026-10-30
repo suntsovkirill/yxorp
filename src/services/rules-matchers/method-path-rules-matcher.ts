@@ -1,4 +1,5 @@
 import { match } from 'path-to-regexp';
+import { splitUrl } from '../../utils/url';
 
 export interface MethodPathRule {
   method: string;
@@ -20,7 +21,7 @@ export abstract class MethodPathRulesMatcher<T extends MethodPathRule> {
   }
 
   public params(url: string, rule: T): Record<string, string> | undefined {
-    return this.matchPath(rule.path, url)?.params;
+    return this.matchPath(rule.path, splitUrl(url).pathname)?.params;
   }
 
   /**
@@ -34,6 +35,9 @@ export abstract class MethodPathRulesMatcher<T extends MethodPathRule> {
   }
 
   private find(url: string, method: string): { rule: T; matchResult: { params: Record<string, string> } } | undefined {
+    // Patterns describe paths only — a query string would make them miss.
+    const { pathname } = splitUrl(url);
+
     for (const rule of this.getRules()) {
       if (rule.disable) {
         continue;
@@ -43,7 +47,7 @@ export abstract class MethodPathRulesMatcher<T extends MethodPathRule> {
         continue;
       }
 
-      const matchResult = this.matchPath(rule.path, url);
+      const matchResult = this.matchPath(rule.path, pathname);
 
       if (matchResult) {
         return { rule, matchResult };
@@ -51,10 +55,10 @@ export abstract class MethodPathRulesMatcher<T extends MethodPathRule> {
     }
   }
 
-  private matchPath(path: string, url: string): { params: Record<string, string> } | undefined {
+  private matchPath(path: string, pathname: string): { params: Record<string, string> } | undefined {
     const matchResult = match<Record<string, string>>(path, {
       decode: decodeURIComponent,
-    })(url);
+    })(pathname);
 
     return matchResult || undefined;
   }

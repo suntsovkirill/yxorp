@@ -4,6 +4,7 @@ import { MockRulesMatcher } from '../../src/services/rules-matchers/mock-rules-m
 import { RewriteRulesMatcher } from '../../src/services/rules-matchers/rewrite-rules-matcher.service';
 import { RemoteRulesMatcher } from '../../src/services/rules-matchers/remote-rules-matcher.service';
 import { createServer } from '../../src/services/yxorp-server.service';
+import { buildProxyConfig } from '../../src/services/proxy-config';
 import { ConfigFile } from '../../src/types/yxorp-config';
 
 export interface YxorpInstance {
@@ -23,29 +24,16 @@ function createSilentLogger(): LoggerService {
 export async function createYxorp(configFile: Partial<ConfigFile> & { target: string }): Promise<YxorpInstance> {
   const logger = createSilentLogger();
 
-  const proxyOptions: Record<string, any> = {
-    target: configFile.target,
-    changeOrigin: true,
-    followRedirects: true,
-    secure: false,
-    ws: true,
-    selfHandleResponse: true,
-  };
-
-  if (configFile.proxyHeaders) {
-    proxyOptions.headers = configFile.proxyHeaders;
-  }
-
   const appConfig = new Config();
-  appConfig.set({
+  appConfig.set(buildProxyConfig({
     target: configFile.target,
     proxyPort: configFile.proxyPort || 0,
+    proxyHeaders: configFile.proxyHeaders,
     mockRules: configFile.mockRules || [],
     rewriteRules: configFile.rewriteRules || [],
     staticRules: configFile.staticRules || [],
     remoteRules: configFile.remoteRules || [],
-    proxyOptions,
-  });
+  }));
 
   const mockRulesMatcher = new MockRulesMatcher(appConfig);
   const rewriteRulesMatcher = new RewriteRulesMatcher(appConfig);
