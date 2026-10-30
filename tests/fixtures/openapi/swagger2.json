@@ -1,0 +1,32 @@
+{
+  "swagger": "2.0",
+  "info": { "title": "Legacy", "version": "1" },
+  "basePath": "/api",
+  "produces": ["application/json"],
+  "paths": {
+    "/users/{id}": {
+      "get": {
+        "responses": {
+          "200": { "description": "User", "schema": { "$ref": "#/definitions/User" } }
+        }
+      }
+    },
+    "/status": {
+      "get": {
+        "responses": {
+          "200": { "description": "Status", "examples": { "application/json": { "ok": true } } }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "User": {
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "format": "uuid" },
+        "active": { "type": "boolean" },
+        "score": { "type": "number", "minimum": 1.5 }
+      }
+    }
+  }
+}

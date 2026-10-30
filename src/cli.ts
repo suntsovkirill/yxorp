@@ -3,16 +3,19 @@ import { LoggerService, logLevelFromArgv } from './services/logger.service';
 import { resolveConfig } from './services/config-resolver';
 import { getArgValue } from './services/cli-overrides';
 import { initConfig } from './services/init-config';
+import { writeMocksFromOpenApi } from './services/openapi-mocks';
 import { startYxorp, YxorpConfigError, YxorpServer } from './app';
 import { readVersion } from './utils/version';
 
 const HELP = `Usage: yxorp [options]
        yxorp init [--target <url>] [--port <port>]
+       yxorp openapi <spec.json|yaml> [--out <file>] [--base-path <path>]
 
 A local reverse proxy for rewriting, mocking, and debugging API responses.
 
 Commands:
   init               Create a starter yxorp.json in the current directory
+  openapi <spec>     Generate mock rules from an OpenAPI/Swagger spec (default: openapi-mocks.json)
 
 Options:
   --config <path>    Config file (default: ./yxorp.json, then ./.yxorp/settings.json)
@@ -46,6 +49,23 @@ async function main(argv: string[]): Promise<void> {
   if (argv[2] === 'init') {
     const created = initConfig(process.cwd(), argv, version);
     console.log(`Created ${created} — edit "target", then run yxorp`);
+    return;
+  }
+
+  if (argv[2] === 'openapi') {
+    const spec = argv[3];
+
+    if (!spec || spec.startsWith('--')) {
+      throw new Error('Usage: yxorp openapi <spec.json|yaml> [--out <file>] [--base-path <path>]');
+    }
+
+    const out = path.resolve(getArgValue(argv, '--out') ?? 'openapi-mocks.json');
+    const { mockRules, skipped } = writeMocksFromOpenApi(path.resolve(spec), out, { basePath: getArgValue(argv, '--base-path') });
+
+    console.log(`Wrote ${mockRules.length} mock rule(s) to ${out}`);
+    skipped.forEach(reason => console.warn(`Skipped ${reason}`));
+    const relative = path.relative(process.cwd(), out).split(path.sep).join('/');
+    console.log(`Use them by adding "${relative.startsWith('.') ? relative : `./${relative}`}" to "include" in your config.`);
     return;
   }
 

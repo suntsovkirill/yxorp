@@ -60,4 +60,17 @@ describe('CLI', { timeout: 30000 }, () => {
     expect(result.stdout).toContain('Created');
     expect(JSON.parse(fs.readFileSync(path.join(dir, 'yxorp.json'), 'utf-8')).target).toBe('http://localhost:8080');
   });
+
+  it('generates mock rules from an OpenAPI spec', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'yxorp-cli-'));
+    tmpDirs.push(dir);
+
+    const spec = path.resolve(__dirname, 'fixtures/openapi/swagger2.json');
+    const result = runCli(['openapi', spec, '--out', 'mocks/api.json'], dir);
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('Wrote 2 mock rule(s)');
+    expect(result.stdout).toContain('"./mocks/api.json" to "include"');
+    expect(JSON.parse(fs.readFileSync(path.join(dir, 'mocks/api.json'), 'utf-8')).mockRules).toHaveLength(2);
+  });
 });
