@@ -8,11 +8,13 @@ import { loadScript } from '../services/script-loader';
 import { delay } from '../utils/delay';
 import { attachBodyReaders } from '../utils/request-body';
 import { readRuleBody } from '../utils/rule-body';
+import { createScriptContext } from '../services/script-context';
 
 export class MockMiddleware implements Middleware<[req: IncomingMessage, res: ServerResponse]> {
   constructor(
     private config: Config,
     private logger: LoggerService,
+    private store: Map<string, any> = new Map(),
   ) {
   }
 
@@ -52,7 +54,7 @@ export class MockMiddleware implements Middleware<[req: IncomingMessage, res: Se
         setHeaders(res, mockRule.headers);
         attachBodyReaders(req);
 
-        await handler(req, res);
+        await handler(req, res, createScriptContext(this.store, req, req.mockRuleParams));
 
         if (!res.headersSent && !res.hasHeader('content-type')) {
           res.setHeader('content-type', 'application/json');

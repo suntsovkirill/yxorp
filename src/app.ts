@@ -49,6 +49,8 @@ export interface YxorpServer {
   port: number;
   /** The live runtime config. */
   config: Config;
+  /** The state mock/rewrite scripts share as `ctx.store`. */
+  store: Map<string, any>;
   /** Stops watching, writes the HAR file, and closes the server. */
   close(): Promise<void>;
 }
@@ -105,7 +107,7 @@ export async function startYxorp(options: YxorpOptions): Promise<YxorpServer> {
   const recorder = options.record ? new Recorder(path.resolve(options.record), configDir, logger) : undefined;
   const capture: CaptureListener[] = [harWriter?.add, recorder?.record].filter((listener) => !!listener);
 
-  const { server } = createServer(
+  const { server, store } = createServer(
     appConfig,
     logger,
     new RewriteRulesMatcher(appConfig),
@@ -141,6 +143,7 @@ export async function startYxorp(options: YxorpOptions): Promise<YxorpServer> {
     url: `${scheme}://${urlHost}:${port}`,
     port,
     config: appConfig,
+    store,
     close: () => {
       watcher?.close();
       harWriter?.flush();

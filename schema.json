@@ -130,6 +130,29 @@
       "items": {
         "$ref": "#/definitions/responseRule"
       }
+    },
+    "requestRules": {
+      "description": "Change matching requests on their way to the target (headers, query, body).",
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/requestRule"
+      }
+    },
+    "chaos": {
+      "description": "Inject failures and latency into every (or every matching) request.",
+      "$ref": "#/definitions/chaos"
+    },
+    "profiles": {
+      "description": "Named sets of rules (and chaos) that can be switched on as a whole with \"profile\" or --profile. A profile's rules go before the base rules.",
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/definitions/profile"
+      }
+    },
+    "profile": {
+      "description": "The active profile (a key of \"profiles\").",
+      "type": "string",
+      "minLength": 1
     }
   },
   "definitions": {
@@ -327,6 +350,155 @@
         },
         "disable": {
           "type": "boolean"
+        }
+      }
+    },
+    "nullableStringMap": {
+      "type": "object",
+      "additionalProperties": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "requestRule": {
+      "type": "object",
+      "required": [
+        "method",
+        "path"
+      ],
+      "additionalProperties": false,
+      "not": {
+        "required": [
+          "json",
+          "body"
+        ]
+      },
+      "properties": {
+        "method": {
+          "$ref": "#/definitions/responseRule/properties/method"
+        },
+        "path": {
+          "$ref": "#/definitions/path"
+        },
+        "match": {
+          "$ref": "#/definitions/responseRule/properties/match"
+        },
+        "headers": {
+          "description": "Request headers to set; null removes one.",
+          "$ref": "#/definitions/nullableStringMap"
+        },
+        "query": {
+          "description": "Query params to set; null removes one.",
+          "$ref": "#/definitions/nullableStringMap"
+        },
+        "json": {
+          "description": "Replace the request body with this value as JSON."
+        },
+        "body": {
+          "description": "Replace the request body with this text.",
+          "type": "string"
+        },
+        "disable": {
+          "type": "boolean"
+        }
+      }
+    },
+    "chaos": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "delay": {
+          "description": "Extra latency in ms: fixed, or random between min and max.",
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 0
+            },
+            {
+              "type": "object",
+              "required": [
+                "min",
+                "max"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "min": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "max": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            }
+          ]
+        },
+        "errorRate": {
+          "description": "Share of requests (0–1) answered with errorStatus.",
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "errorStatus": {
+          "description": "Status for injected errors (default 503).",
+          "type": "integer",
+          "minimum": 100,
+          "maximum": 599
+        },
+        "dropRate": {
+          "description": "Share of requests (0–1) whose connection is dropped.",
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "paths": {
+          "description": "Only affect requests whose path matches one of these patterns.",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/path"
+          }
+        }
+      }
+    },
+    "profile": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "remoteRules": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/remoteRule"
+          }
+        },
+        "staticRules": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/staticRule"
+          }
+        },
+        "mockRules": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/responseRule"
+          }
+        },
+        "rewriteRules": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/responseRule"
+          }
+        },
+        "requestRules": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/requestRule"
+          }
+        },
+        "chaos": {
+          "$ref": "#/definitions/chaos"
         }
       }
     }

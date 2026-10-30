@@ -18,5 +18,33 @@ export function buildProxyConfig(cfg: ConfigFile, configDir: string = process.cw
     proxyOptions.headers = cfg.proxyHeaders;
   }
 
-  return { ...cfg, proxyOptions, configDir };
+  return { ...applyProfile(cfg), proxyOptions, configDir };
+}
+
+const PROFILE_SECTIONS = ['remoteRules', 'staticRules', 'mockRules', 'rewriteRules', 'requestRules'] as const;
+
+/**
+ * Puts the active profile's rules in front of the base rules (first match
+ * wins, so they take precedence) and lets its `chaos` replace the base one.
+ */
+export function applyProfile(cfg: ConfigFile): ConfigFile {
+  const profile = cfg.profile ? cfg.profiles?.[cfg.profile] : undefined;
+
+  if (!profile) {
+    return cfg;
+  }
+
+  const merged: ConfigFile = { ...cfg };
+
+  for (const section of PROFILE_SECTIONS) {
+    if (profile[section]) {
+      merged[section] = [...profile[section], ...(cfg[section] ?? [])] as any;
+    }
+  }
+
+  if (profile.chaos !== undefined) {
+    merged.chaos = profile.chaos;
+  }
+
+  return merged;
 }

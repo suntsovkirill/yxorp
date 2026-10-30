@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 import Ajv from 'ajv';
-import { KNOWN_RULE_KEYS, KNOWN_TOP_LEVEL_KEYS, validateConfig } from '../src/services/config-validator';
+import { KNOWN_PROFILE_KEYS, KNOWN_RULE_KEYS, KNOWN_TOP_LEVEL_KEYS, validateConfig } from '../src/services/config-validator';
 
 const schema = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../schema.json'), 'utf-8'));
 const validateSchema = new Ajv({ allErrors: true, strict: false }).compile(schema);
@@ -13,12 +13,14 @@ describe('schema.json', () => {
   it('knows exactly the keys the validator knows', () => {
     expect(Object.keys(schema.properties).sort()).toEqual([...KNOWN_TOP_LEVEL_KEYS].sort());
 
-    const definitionFor = { remoteRules: 'remoteRule', staticRules: 'staticRule', mockRules: 'responseRule', rewriteRules: 'responseRule' } as const;
+    const definitionFor = { remoteRules: 'remoteRule', staticRules: 'staticRule', mockRules: 'responseRule', rewriteRules: 'responseRule', requestRules: 'requestRule' } as const;
 
     for (const [section, keys] of Object.entries(KNOWN_RULE_KEYS)) {
       const definition = schema.definitions[definitionFor[section as keyof typeof definitionFor]];
       expect(Object.keys(definition.properties).sort(), section).toEqual([...keys].sort());
     }
+
+    expect(Object.keys(schema.definitions.profile.properties).sort()).toEqual([...KNOWN_PROFILE_KEYS].sort());
   });
 
   const valid = [
@@ -37,6 +39,13 @@ describe('schema.json', () => {
         { method: 'GET', path: '/d', body: 'text', disable: true },
       ],
       rewriteRules: [{ method: 'GET', path: '/e', json: [] }],
+      requestRules: [{ method: 'POST', path: '/f', headers: { 'x-a': '1', cookie: null }, query: { debug: '1' }, json: { a: 1 } }],
+      chaos: { delay: { min: 10, max: 100 }, errorRate: 0.1, errorStatus: 500, dropRate: 0.01, paths: ['/api/*rest'] },
+      profiles: {
+        empty: { mockRules: [{ method: 'GET', path: '/g', json: [] }], chaos: { delay: 5 } },
+        flaky: { chaos: { errorRate: 0.5 } },
+      },
+      profile: 'empty',
     },
   ];
 
@@ -58,6 +67,10 @@ describe('schema.json', () => {
     'static rule without directory': { ...base, staticRules: [{ path: '/a' }] },
     'https without cert': { ...base, https: { key: 'k.pem' } },
     'cors not boolean/object': { ...base, cors: 'yes' },
+    'request rule with json and body': { ...base, requestRules: [{ method: 'GET', path: '/a', json: {}, body: '' }] },
+    'chaos rate above 1': { ...base, chaos: { errorRate: 2 } },
+    'chaos unknown key': { ...base, chaos: { errorrate: 0.5 } },
+    'invalid rule inside a profile': { ...base, profiles: { p: { mockRules: [{ method: 'GET', path: '/a' }] } } },
   };
 
   it.each(Object.entries(invalid))('rejects %s, like the validator', (_name, config) => {

@@ -27,14 +27,15 @@ export function getArgValue(argv: string[], flag: string): string | undefined {
 }
 
 // CLI flag → the config key it overrides.
-const OVERRIDES: Record<string, 'proxyPort' | 'target' | 'host'> = {
+const OVERRIDES: Record<string, 'proxyPort' | 'target' | 'host' | 'profile'> = {
   '--port': 'proxyPort',
   '--target': 'target',
   '--host': 'host',
+  '--profile': 'profile',
 };
 
 /**
- * Applies `--port`/`--target`/`--host` CLI flags on top of a resolved config,
+ * Applies `--port`/`--target`/`--host`/`--profile` CLI flags on top of a resolved config,
  * without touching the config file. CLI flags win over config values. Returns
  * a new object — the input config is left untouched.
  */

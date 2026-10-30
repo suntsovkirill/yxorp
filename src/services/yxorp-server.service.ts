@@ -19,6 +19,7 @@ import { ProxyMiddleware } from '../middleware/proxy.middleware';
 import { MockMiddleware } from '../middleware/mock.middleware';
 import { StaticMiddleware } from '../middleware/static.middleware';
 import { CorsMiddleware } from '../middleware/cors.middleware';
+import { ChaosMiddleware } from '../middleware/chaos.middleware';
 import { CaptureListener, CaptureMiddleware } from '../middleware/capture.middleware';
 import { HttpsOptions } from '../types/yxorp-config';
 import { describeError, sendErrorResponse } from '../utils/error-response';
@@ -36,14 +37,18 @@ export function createServer(
   } = {},
 ): {
   server: HttpServer;
+  // State shared by mock/rewrite scripts (`ctx.store`).
+  store: Map<string, any>;
   listen: (port: string | number, callback?: () => void) => void;
 } {
+  const store = new Map<string, any>();
+
   // 1. Proxy pipeline (outgoing responses) — no deps on proxy/server
   const proxyPipeline = new Pipeline<[proxyRes: IncomingMessage, req: IncomingMessage, res: ServerResponse]>();
   proxyPipeline.use(
     new StreamMiddleware(logger),
     new RawBodyMiddleware(logger),
-    new RewriteMiddleware(config, logger),
+    new RewriteMiddleware(config, logger, store),
     new ProxyResMiddleware(logger),
   );
 
@@ -58,9 +63,10 @@ export function createServer(
 
   serverPipeline.use(
     new CorsMiddleware(config, logger),
+    new ChaosMiddleware(config, logger),
     new StaticMiddleware(config, logger),
     new BootstrapMiddleware(rewriteRulesMatcher, mockRulesMatcher, logger),
-    new MockMiddleware(config, logger),
+    new MockMiddleware(config, logger, store),
     new ProxyMiddleware(proxy, remoteRulesMatcher, config, logger),
   );
 
@@ -132,7 +138,7 @@ export function createServer(
     server.listen(port, callback);
   };
 
-  return { server, listen };
+  return { server, listen, store };
 }
 
 /**

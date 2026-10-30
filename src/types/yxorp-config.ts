@@ -29,6 +29,34 @@ export interface ConfigFile {
   requestRules?: RequestRule[];
   // More config files (rule lists only) merged after this one's rules.
   include?: string[];
+  // Inject failures and latency into every (or every matching) request.
+  chaos?: ChaosOptions;
+  // Named sets of rules (and chaos) that can be switched on as a whole.
+  profiles?: Record<string, Profile>;
+  // The active profile — its rules go before the base rules.
+  profile?: string;
+}
+
+export interface ChaosOptions {
+  // Extra latency in ms: fixed, or random between min and max.
+  delay?: number | { min: number; max: number };
+  // Share of requests (0–1) answered with `errorStatus` instead.
+  errorRate?: number;
+  // Status for injected errors (default 503).
+  errorStatus?: number;
+  // Share of requests (0–1) whose connection is dropped without a response.
+  dropRate?: number;
+  // Only affect requests whose path matches one of these patterns (default: all).
+  paths?: string[];
+}
+
+export interface Profile {
+  remoteRules?: RemoteRule[];
+  staticRules?: StaticRule[];
+  mockRules?: MockRule[];
+  rewriteRules?: RewriteRule[];
+  requestRules?: RequestRule[];
+  chaos?: ChaosOptions;
 }
 
 export interface CorsOptions {

@@ -8,11 +8,13 @@ import { logAccess } from '../utils/access-log';
 import { loadScript } from '../services/script-loader';
 import { delay } from '../utils/delay';
 import { readRuleBody } from '../utils/rule-body';
+import { createScriptContext } from '../services/script-context';
 
 export class RewriteMiddleware implements Middleware<[proxyRes: IncomingMessage, req: IncomingMessage, res: ServerResponse]> {
   constructor(
     private config: Config,
     private logger: LoggerService,
+    private store: Map<string, any> = new Map(),
   ) {
   }
 
@@ -41,7 +43,7 @@ export class RewriteMiddleware implements Middleware<[proxyRes: IncomingMessage,
           this.logger.error(`Rewrite script "${fullPath}" does not export a function (module.exports = (body, proxyRes, req, res) => {...} or export default) — response passed through unchanged`);
         } else {
           const decodedResponse = await decodeBuffer(response, encoding);
-          const rewrittenBody = toResponseBody(await handler(decodedResponse, proxyRes, req, res));
+          const rewrittenBody = toResponseBody(await handler(decodedResponse, proxyRes, req, res, createScriptContext(this.store, req, req.rewriteRuleParams)));
 
           if (rewrittenBody === undefined) {
             this.logger.warn(`Rewrite script "${fullPath}" returned nothing — response passed through unchanged`);
