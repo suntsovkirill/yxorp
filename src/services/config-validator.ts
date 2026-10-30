@@ -431,12 +431,12 @@ function validateMatch(label: string, match: any): string[] {
   }
 
   if (!match || typeof match !== 'object' || Array.isArray(match)) {
-    return [`${label} "match" must be an object with optional "query" and "headers"`];
+    return [`${label} "match" must be an object with optional "query", "headers" and "body"`];
   }
 
   const errors = Object.keys(match)
-    .filter(key => key !== 'query' && key !== 'headers')
-    .map(key => `${label} "match" has an unknown key "${key}" (expected "query" or "headers")`);
+    .filter(key => key !== 'query' && key !== 'headers' && key !== 'body')
+    .map(key => `${label} "match" has an unknown key "${key}" (expected "query", "headers" or "body")`);
 
   errors.push(...validateStringMap(`${label} "match.query"`, match.query));
   errors.push(...validateStringMap(`${label} "match.headers"`, match.headers));

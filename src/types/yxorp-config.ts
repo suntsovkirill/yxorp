@@ -99,6 +99,10 @@ export type StaticRule = {
 export interface RuleMatch {
   query?: Record<string, string>;
   headers?: Record<string, string>;
+  // Partial match on the JSON request body: every listed field must be
+  // present with an equal value (nested objects compare the same way) — e.g.
+  // { "operationName": "GetUser" } for a GraphQL request.
+  body?: unknown;
 }
 
 interface ResponseRuleBase {

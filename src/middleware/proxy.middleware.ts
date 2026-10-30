@@ -1,4 +1,5 @@
 import { IncomingMessage, ServerResponse } from 'http';
+import { Readable } from 'stream';
 import { HttpProxy } from '../services/http-proxy.service';
 import { RemoteRulesMatcher, RemoteTarget } from '../services/rules-matchers/remote-rules-matcher.service';
 import { Config } from '../services/config.service';
@@ -34,6 +35,9 @@ export class ProxyMiddleware implements Middleware<[req: IncomingMessage, res: S
     const options = {
       ...proxyOptions,
       ...remoteTarget,
+      // A body that was already read (match.body) or replaced (request rule)
+      // is piped to the target instead of the — now drained — request stream.
+      ...(req.proxyBody ? { buffer: Readable.from([req.proxyBody]) } : {}),
     };
 
     if (remoteTarget) {

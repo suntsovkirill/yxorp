@@ -176,8 +176,9 @@ describe('config-validator', () => {
         .toContainEqual(expect.stringContaining('"headers" value for "x-a" must be a string'));
       expect(validateConfig({ ...base, mockRules: [{ ...rule, match: { query: { page: 2 } } }] }))
         .toContainEqual(expect.stringContaining('"match.query" value for "page" must be a string'));
-      expect(validateConfig({ ...base, mockRules: [{ ...rule, match: { body: {} } }] }))
-        .toContainEqual(expect.stringContaining('"match" has an unknown key "body"'));
+      expect(validateConfig({ ...base, mockRules: [{ ...rule, match: { body: { operationName: 'GetUser' } } }] })).toEqual([]);
+      expect(validateConfig({ ...base, mockRules: [{ ...rule, match: { cookies: {} } }] }))
+        .toContainEqual(expect.stringContaining('"match" has an unknown key "cookies"'));
       expect(validateConfig({ ...base, mockRules: [{ ...rule, match: [] }] }))
         .toContainEqual(expect.stringContaining('"match" must be an object'));
     });

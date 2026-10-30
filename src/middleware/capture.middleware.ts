@@ -69,7 +69,7 @@ export class CaptureMiddleware implements Middleware<[req: IncomingMessage, res:
         handledBy: req.handledBy,
         request: {
           method: req.method || 'GET',
-          url: req.url || '/',
+          url: req.originalUrl ?? (req.url || '/'),
           httpVersion: req.httpVersion,
           headers: req.headers,
           body: requestBody.result(),

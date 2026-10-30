@@ -6,6 +6,14 @@ declare module 'http' {
     rewriteLogged?: boolean;
     mockRule?: import("./yxorp-config").MockRule;
     mockRuleParams?: Record<string, string>;
+    requestRule?: import("./yxorp-config").RequestRule;
+    // The request body parsed as JSON, when it was read for `match.body`.
+    parsedBody?: unknown;
+    // Replacement body for the proxied request (request rules), or the
+    // already-read original — piped to the target instead of `req`.
+    proxyBody?: Buffer;
+    // `req.url` as the client sent it, before request rules changed the query.
+    originalUrl?: string;
     query?: Record<string, any>;
     startTime?: number;
     wsStatusCode?: number;

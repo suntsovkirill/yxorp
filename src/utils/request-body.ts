@@ -10,14 +10,16 @@ export function attachBodyReaders(req: IncomingMessage): void {
   let body: Promise<Buffer> | undefined;
 
   req.buffer = () => {
-    body ??= readBody(req);
+    // Already read (for `match.body`)? Then the stream is drained — reuse it.
+    body ??= req.proxyBody ? Promise.resolve(req.proxyBody) : readRequestBody(req);
     return body;
   };
   req.text = async () => (await req.buffer!()).toString('utf-8');
   req.json = async () => JSON.parse(await req.text!());
 }
 
-function readBody(req: IncomingMessage): Promise<Buffer> {
+/** Reads the whole request body; also keeps it as `req.requestBody`. */
+export function readRequestBody(req: IncomingMessage): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
 

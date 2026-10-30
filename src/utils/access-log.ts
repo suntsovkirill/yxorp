@@ -10,7 +10,7 @@ const LABEL_WIDTH = 8;
  * static) line up in the log output.
  */
 export function formatAccessLog(label: string, statusCode: number | string | undefined, req: IncomingMessage): string {
-  return `${label.padEnd(LABEL_WIDTH)}${statusCode} ${req.method} ${req.url} ${elapsedMs(req)}ms`;
+  return `${label.padEnd(LABEL_WIDTH)}${statusCode} ${req.method} ${req.originalUrl ?? req.url} ${elapsedMs(req)}ms`;
 }
 
 /**

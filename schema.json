@@ -305,7 +305,7 @@
           "$ref": "#/definitions/path"
         },
         "match": {
-          "description": "Extra conditions: every listed query param / request header must have exactly this value.",
+          "description": "Extra conditions: every listed query param / request header must have exactly this value, and the JSON request body must contain the fields in \"body\".",
           "type": "object",
           "additionalProperties": false,
           "properties": {
@@ -314,6 +314,9 @@
             },
             "headers": {
               "$ref": "#/definitions/stringMap"
+            },
+            "body": {
+              "description": "Partial match on the JSON request body — every listed field must be present with an equal value, e.g. { \"operationName\": \"GetUser\" } for GraphQL."
             }
           }
         },

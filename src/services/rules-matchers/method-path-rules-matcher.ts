@@ -19,8 +19,13 @@ export interface MethodPathRule {
 export abstract class MethodPathRulesMatcher<T extends MethodPathRule> {
   protected abstract getRules(): T[];
 
-  public match(url: string, method: string, headers: IncomingHttpHeaders = {}): T | undefined {
-    return this.find(url, method, headers)?.rule;
+  public match(url: string, method: string, headers: IncomingHttpHeaders = {}, body?: unknown): T | undefined {
+    return this.find(url, method, headers, body)?.rule;
+  }
+
+  /** Whether any enabled rule needs the request body to decide (`match.body`). */
+  public needsBody(): boolean {
+    return this.getRules().some(rule => !rule.disable && rule.match?.body !== undefined);
   }
 
   public params(url: string, rule: T): Record<string, string> | undefined {
@@ -36,8 +41,9 @@ export abstract class MethodPathRulesMatcher<T extends MethodPathRule> {
     url: string,
     method: string,
     headers: IncomingHttpHeaders = {},
+    body?: unknown,
   ): { rule: T; params: Record<string, string> } | undefined {
-    const found = this.find(url, method, headers);
+    const found = this.find(url, method, headers, body);
     return found ? { rule: found.rule, params: found.matchResult.params } : undefined;
   }
 
@@ -45,6 +51,7 @@ export abstract class MethodPathRulesMatcher<T extends MethodPathRule> {
     url: string,
     method: string,
     headers: IncomingHttpHeaders,
+    body: unknown,
   ): { rule: T; matchResult: { params: Record<string, string> } } | undefined {
     // Patterns describe paths only — a query string would make them miss. The
     // query takes part only through a rule's `match.query` conditions.
@@ -69,7 +76,7 @@ export abstract class MethodPathRulesMatcher<T extends MethodPathRule> {
       if (rule.match) {
         query ??= new URLSearchParams(search);
 
-        if (!matchesConditions(rule.match, query, headers)) {
+        if (!matchesConditions(rule.match, query, headers, body)) {
           continue;
         }
       }
@@ -83,7 +90,7 @@ export abstract class MethodPathRulesMatcher<T extends MethodPathRule> {
  * Every `match.query` param and `match.headers` header must be present with
  * exactly the given value (for a repeated param/header, any of its values).
  */
-function matchesConditions(match: RuleMatch, query: URLSearchParams, headers: IncomingHttpHeaders): boolean {
+function matchesConditions(match: RuleMatch, query: URLSearchParams, headers: IncomingHttpHeaders, body: unknown): boolean {
   for (const [name, expected] of Object.entries(match.query || {})) {
     if (!query.getAll(name).includes(expected)) {
       return false;
@@ -99,5 +106,25 @@ function matchesConditions(match: RuleMatch, query: URLSearchParams, headers: In
     }
   }
 
-  return true;
+  return match.body === undefined || matchesPartially(match.body, body);
+}
+
+/**
+ * `expected` is contained in `actual`: objects match when every key of
+ * `expected` matches (extra keys in `actual` are fine), arrays element by
+ * element with the same length, anything else by strict equality.
+ */
+export function matchesPartially(expected: unknown, actual: unknown): boolean {
+  if (Array.isArray(expected)) {
+    return Array.isArray(actual) &&
+      actual.length === expected.length &&
+      expected.every((item, index) => matchesPartially(item, actual[index]));
+  }
+
+  if (expected && typeof expected === 'object') {
+    return !!actual && typeof actual === 'object' && !Array.isArray(actual) &&
+      Object.entries(expected).every(([key, value]) => matchesPartially(value, (actual as Record<string, unknown>)[key]));
+  }
+
+  return expected === actual;
 }

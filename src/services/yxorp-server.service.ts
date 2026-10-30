@@ -20,6 +20,8 @@ import { MockMiddleware } from '../middleware/mock.middleware';
 import { StaticMiddleware } from '../middleware/static.middleware';
 import { CorsMiddleware } from '../middleware/cors.middleware';
 import { ChaosMiddleware } from '../middleware/chaos.middleware';
+import { RequestRewriteMiddleware } from '../middleware/request-rewrite.middleware';
+import { RequestRulesMatcher } from './rules-matchers/request-rules-matcher.service';
 import { CaptureListener, CaptureMiddleware } from '../middleware/capture.middleware';
 import { HttpsOptions } from '../types/yxorp-config';
 import { describeError, sendErrorResponse } from '../utils/error-response';
@@ -65,8 +67,9 @@ export function createServer(
     new CorsMiddleware(config, logger),
     new ChaosMiddleware(config, logger),
     new StaticMiddleware(config, logger),
-    new BootstrapMiddleware(rewriteRulesMatcher, mockRulesMatcher, logger),
+    new BootstrapMiddleware(rewriteRulesMatcher, mockRulesMatcher, new RequestRulesMatcher(config), logger),
     new MockMiddleware(config, logger, store),
+    new RequestRewriteMiddleware(logger),
     new ProxyMiddleware(proxy, remoteRulesMatcher, config, logger),
   );
 
