@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="yxorp-token" content="%%YXORP_TOKEN%%">
+  <title>yxorp</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">yxorp</div>
+    <div class="proxy-info">
+      <span class="status-dot" id="status-dot" title="Live updates"></span>
+      <span id="proxy-url" class="mono"></span>
+      <span class="arrow">→</span>
+      <span id="target-url" class="mono muted"></span>
+    </div>
+    <div class="topbar-controls">
+      <label class="profile-picker">
+        <span class="muted">Profile</span>
+        <select id="profile-select"></select>
+      </label>
+      <span id="store-info" class="muted"></span>
+      <button id="store-reset" class="btn small" title="Clear ctx.store shared by mock/rewrite scripts">Reset store</button>
+    </div>
+  </header>
+
+  <nav class="tabs" id="tabs">
+    <button class="tab active" data-tab="traffic">Traffic</button>
+    <button class="tab" data-tab="rules">Rules</button>
+    <button class="tab" data-tab="config">Config</button>
+  </nav>
+
+  <main>
+    <section id="tab-traffic" class="tab-panel">
+      <div class="toolbar">
+        <input id="traffic-filter" type="search" placeholder="Filter by method, path, status or handler…">
+        <label class="checkbox"><input id="traffic-follow" type="checkbox" checked> Follow</label>
+        <button id="traffic-clear" class="btn small">Clear</button>
+        <span id="traffic-count" class="muted"></span>
+      </div>
+      <div class="split">
+        <div class="table-wrap" id="traffic-wrap">
+          <table class="traffic">
+            <thead>
+              <tr><th>#</th><th>Time</th><th>Method</th><th>Status</th><th>By</th><th class="grow">Path</th><th>ms</th><th>Size</th></tr>
+            </thead>
+            <tbody id="traffic-body"></tbody>
+          </table>
+          <div id="traffic-empty" class="empty">No requests yet — send some through the proxy.</div>
+        </div>
+        <aside class="detail" id="detail">
+          <div class="empty">Select a request to inspect it.</div>
+        </aside>
+      </div>
+    </section>
+
+    <section id="tab-rules" class="tab-panel hidden">
+      <div id="readonly-banner" class="banner hidden">
+        Started from a config object, not a file — rules are read-only.
+      </div>
+      <div id="rules"></div>
+    </section>
+
+    <section id="tab-config" class="tab-panel hidden">
+      <div class="toolbar">
+        <span id="config-path" class="mono muted"></span>
+        <span class="spacer"></span>
+        <button id="config-reload" class="btn small">Reload from disk</button>
+        <button id="config-save" class="btn primary small">Save</button>
+      </div>
+      <ul id="config-errors" class="errors hidden"></ul>
+      <textarea id="config-text" class="code-editor" spellcheck="false"></textarea>
+    </section>
+  </main>
+
+  <div id="toasts" class="toasts"></div>
+  <script src="/app.js"></script>
+</body>
+</html>

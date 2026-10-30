@@ -26,12 +26,24 @@ Options:
   --verbose          Log debug details (matched rules, proxy targets, error stacks)
   --har <file>       Save all traffic (headers and bodies) to a HAR file
   --record <dir>     Save proxied responses to <dir> plus mock rules replaying them (recorded.json)
+  --ui [port]        Start the web UI on http://127.0.0.1:<port> (default 4040)
   -v, --version      Print the version
   -h, --help         Print this help
 
 Docs: https://github.com/suntsovkirill/yxorp#readme`;
 
 const SHUTDOWN_TIMEOUT_MS = 5000;
+
+/** `--ui` → true, `--ui 5050` / `--ui=5050` → { port: 5050 }, absent → undefined (the config decides). */
+function parseUiFlag(argv: string[]): boolean | { port: number } | undefined {
+  const value = getArgValue(argv, '--ui');
+
+  if (value !== undefined && /^\d+$/.test(value)) {
+    return { port: Number(value) };
+  }
+
+  return argv.includes('--ui') || value !== undefined ? true : undefined;
+}
 
 async function main(argv: string[]): Promise<void> {
   if (argv.includes('--help') || argv.includes('-h')) {
@@ -92,6 +104,7 @@ async function main(argv: string[]): Promise<void> {
       logger,
       har,
       record,
+      ui: parseUiFlag(argv),
     });
   } catch (e: any) {
     if (e?.code === 'EADDRINUSE') {
@@ -102,6 +115,8 @@ async function main(argv: string[]): Promise<void> {
   }
 
   console.log(`Yxorp server started successfully on ${server.url}`);
+
+  if (server.uiUrl) console.log(`Web UI: ${server.uiUrl}`);
 
   if (har) console.log(`Saving traffic to ${har}`);
   if (record) console.log(`Recording proxied responses to ${record}`);

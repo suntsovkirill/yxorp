@@ -35,6 +35,8 @@ export interface ConfigFile {
   profiles?: Record<string, Profile>;
   // The active profile — its rules go before the base rules.
   profile?: string;
+  // Start the web UI (on 127.0.0.1, default port 4040).
+  ui?: boolean | { port?: number };
 }
 
 export interface ChaosOptions {

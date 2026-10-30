@@ -153,6 +153,25 @@
       "description": "The active profile (a key of \"profiles\").",
       "type": "string",
       "minLength": 1
+    },
+    "ui": {
+      "description": "Start the web UI on 127.0.0.1 (default port 4040): live traffic, mock-from-response, replay, and rule editing. Requires a restart to change.",
+      "oneOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "port": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 65535
+            }
+          }
+        }
+      ]
     }
   },
   "definitions": {

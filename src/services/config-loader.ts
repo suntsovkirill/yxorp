@@ -38,7 +38,11 @@ export interface LoadedConfig {
  * inside included files, are relative to the main config's directory.
  * Wildcards (`*`, `?`) are supported in the file name only.
  */
-export function loadConfigFile(configPath: string): LoadedConfig {
+export function loadConfigFile(configPath: string, overrides?: Map<string, unknown>): LoadedConfig {
+  // `overrides` stands in for files' contents — to validate an edit before writing it.
+  const readJson = (file: string, what: string) =>
+    overrides?.has(file) ? structuredClone(overrides.get(file)) : readJsonFile(file, what);
+
   const config = readJson(configPath, 'config') as ConfigFile & { include?: unknown };
   const configDir = path.dirname(configPath);
   const sources: LoadedConfig['sources'] = {};
@@ -100,7 +104,7 @@ export function loadConfigFile(configPath: string): LoadedConfig {
   return { config: merged, files, includePatterns, sources };
 }
 
-function readJson(file: string, what: string): unknown {
+function readJsonFile(file: string, what: string): unknown {
   let raw: string;
 
   try {

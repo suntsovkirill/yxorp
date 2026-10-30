@@ -6,7 +6,7 @@ import { RewriteRulesMatcher } from './services/rules-matchers/rewrite-rules-mat
 import { MockRulesMatcher } from './services/rules-matchers/mock-rules-matcher.service';
 import { createServer } from './services/yxorp-server.service';
 import { findConfigWarnings, validateConfig } from './services/config-validator';
-import { applyCliOverrides } from './services/cli-overrides';
+import { applyCliOverrides, getArgValue } from './services/cli-overrides';
 import { buildProxyConfig } from './services/proxy-config';
 import { createConfigReloadHandler } from './services/config-reload';
 import { loadConfigFile } from './services/config-loader';
@@ -16,6 +16,10 @@ import { Recorder } from './services/recorder';
 import { CaptureListener } from './middleware/capture.middleware';
 import { ConfigFile, YxorpConfig } from './types/yxorp-config';
 import { readVersion } from './utils/version';
+import { EventEmitter } from 'events';
+import { TrafficLog } from './ui/traffic-log';
+import { startUiServer, UiServer } from './ui/ui-server';
+import { ConfigEditor } from './ui/config-editor';
 
 export const DEFAULT_HOST = '127.0.0.1';
 
@@ -40,6 +44,8 @@ export interface YxorpOptions {
   har?: string;
   /** Record proxied responses (and replaying mock rules) into this directory. */
   record?: string;
+  /** Start the web UI — wins over the config's `ui`. */
+  ui?: boolean | { port?: number };
 }
 
 export interface YxorpServer {
@@ -51,6 +57,8 @@ export interface YxorpServer {
   config: Config;
   /** The state mock/rewrite scripts share as `ctx.store`. */
   store: Map<string, any>;
+  /** The web UI's URL, when it's running. */
+  uiUrl?: string;
   /** Stops watching, writes the HAR file, and closes the server. */
   close(): Promise<void>;
 }
@@ -103,9 +111,11 @@ export async function startYxorp(options: YxorpOptions): Promise<YxorpServer> {
   const appConfig = new Config();
   appConfig.set(buildProxyConfig(config, configDir));
 
+  const uiOption = options.ui ?? config.ui;
   const harWriter = options.har ? new HarWriter(path.resolve(options.har), readVersion()) : undefined;
   const recorder = options.record ? new Recorder(path.resolve(options.record), configDir, logger) : undefined;
-  const capture: CaptureListener[] = [harWriter?.add, recorder?.record].filter((listener) => !!listener);
+  const traffic = uiOption ? new TrafficLog() : undefined;
+  const capture: CaptureListener[] = [harWriter?.add, recorder?.record, traffic?.add].filter((listener) => !!listener);
 
   const { server, store } = createServer(
     appConfig,
@@ -128,27 +138,75 @@ export async function startYxorp(options: YxorpOptions): Promise<YxorpServer> {
 
   const port = (server.address() as { port: number }).port;
 
+  // Fires 'config' after every reload — the web UI refreshes on it.
+  const events = new EventEmitter();
+  const reloadHandler = createConfigReloadHandler(appConfig, logger, argv);
+  let lastLoaded = JSON.stringify(fileConfig);
+
+  const onReload = (newConfig: ConfigFile) => {
+    // An edit from the web UI reloads right away; the file watcher then sees
+    // the same change again — skip reloads that change nothing.
+    const loaded = JSON.stringify(newConfig);
+
+    if (loaded === lastLoaded) {
+      return;
+    }
+
+    lastLoaded = loaded;
+    reloadHandler(newConfig);
+    events.emit('config');
+  };
+
   const watcher = options.configPath
     ? watchConfig(
       path.resolve(options.configPath),
-      createConfigReloadHandler(appConfig, logger, argv),
+      onReload,
       (e: any) => logger.error(`Config reload failed: ${e.message || e}`),
     )
     : undefined;
 
   const scheme = config.https ? 'https' : 'http';
   const urlHost = host === '0.0.0.0' || host === '::' ? 'localhost' : host.includes(':') ? `[${host}]` : host;
+  const url = `${scheme}://${urlHost}:${port}`;
+
+  let ui: UiServer | undefined;
+
+  if (traffic && uiOption) {
+    const configPath = options.configPath ? path.resolve(options.configPath) : undefined;
+
+    try {
+      ui = await startUiServer({
+        port: typeof uiOption === 'object' ? uiOption.port : undefined,
+        version: readVersion(),
+        appConfig,
+        store,
+        traffic,
+        events,
+        // Replay through the loopback interface even when listening on all of them.
+        proxyUrl: `${scheme}://${host === '0.0.0.0' || host === '::' ? '127.0.0.1' : urlHost}:${port}`,
+        // After an edit, reload right away rather than waiting for the file watcher.
+        editor: configPath ? new ConfigEditor(configPath, argv, () => onReload(loadConfigFile(configPath).config)) : undefined,
+        profileFromCli: getArgValue(argv, '--profile') !== undefined,
+        logger,
+      });
+    } catch (e) {
+      watcher?.close();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+      throw e;
+    }
+  }
 
   return {
-    url: `${scheme}://${urlHost}:${port}`,
+    url,
     port,
     config: appConfig,
     store,
-    close: () => {
+    uiUrl: ui?.url,
+    close: async () => {
       watcher?.close();
       harWriter?.flush();
-
-      return new Promise<void>((resolve) => server.close(() => resolve()));
+      await ui?.close();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
     },
   };
 }

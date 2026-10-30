@@ -25,6 +25,7 @@ export const KNOWN_TOP_LEVEL_KEYS = new Set([
   'chaos',
   'profiles',
   'profile',
+  'ui',
   ...RULE_ARRAYS,
 ]);
 
@@ -96,6 +97,7 @@ export function validateConfig(config: any): string[] {
   errors.push(...validateRuleSections(config, ''));
   errors.push(...validateChaos('"chaos"', config.chaos));
   errors.push(...validateProfiles(config.profiles, config.profile));
+  errors.push(...validateUi(config.ui));
 
   return errors;
 }
@@ -121,6 +123,20 @@ function validateRuleSections(source: any, prefix: string): string[] {
   }
 
   return errors;
+}
+
+function validateUi(ui: any): string[] {
+  if (ui === undefined || typeof ui === 'boolean') {
+    return [];
+  }
+
+  if (!ui || typeof ui !== 'object' || Array.isArray(ui) || Object.keys(ui).some(key => key !== 'port')) {
+    return ['"ui" must be true, false, or { "port": <port> }'];
+  }
+
+  return ui.port === undefined || (Number.isInteger(ui.port) && ui.port >= 0 && ui.port <= MAX_PORT)
+    ? []
+    : [`"ui.port" must be a port number between 0 and ${MAX_PORT}`];
 }
 
 function validateProfiles(profiles: any, active: any): string[] {
