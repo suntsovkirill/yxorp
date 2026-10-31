@@ -9,7 +9,21 @@ config schema, CLI flags, or mock/rewrite script API.
 
 ## [Unreleased]
 
-### Added — web UI and more
+## [0.4.0] - not released yet
+
+### Breaking changes
+- **Node.js 20.19+ or 22.12+ is required** (was >= 20). The `httpxy`
+  dependency is ESM-only and is loaded with `require()`, which only works
+  unflagged from those versions — on Node 20.0–20.18 Yxorp failed at startup.
+- **Yxorp listens on `127.0.0.1` by default** (was: all interfaces), so the
+  proxy — and the files and scripts behind it — aren't reachable from other
+  machines. Set `"host": "0.0.0.0"` (or `--host 0.0.0.0`) for the old
+  behavior.
+- Config validation is stricter (see Changed) — configs that used to start
+  with an invalid `target`, unknown `method`, or out-of-range `statusCode`
+  are now rejected with a message naming the field.
+
+### Added
 - **Web UI** (`--ui [port]`, `"ui"`): live traffic with decoded details,
   one-click "mock this response", replay (as-is or edited), copy as cURL,
   rule management across the config and its includes (toggle, reorder, edit,
@@ -33,51 +47,6 @@ config schema, CLI flags, or mock/rewrite script API.
 - **Programmatic API**: `require('yxorp')` exports `startYxorp()`,
   `YxorpConfigError`, `validateConfig()` and the config types.
 - **`host`** option and `--host`.
-
-### Changed — web UI and more
-- **Yxorp listens on `127.0.0.1` by default** (was: all interfaces), so the
-  proxy — and the files and scripts behind it — aren't reachable from other
-  machines. Set `"host": "0.0.0.0"` (or `--host 0.0.0.0`) for the old
-  behavior.
-- The package's `main` is now the library entry and has no side effects;
-  the CLI moved to `dist/cli.js` (the `yxorp` command is unchanged).
-- Relative paths in the config resolve against the config's directory
-  directly, rather than through `process.chdir()` (the CLI still changes
-  into the config directory for scripts that rely on it).
-- A config reload that changes nothing is skipped.
-
-### Fixed
-- Mock, rewrite, and remote rules now match the URL path only, so a request
-  with a query string (`/api/users?page=2`) no longer misses its rule, and the
-  query string no longer leaks into path params.
-- Remote rules whose `target` has a path (`http://host/v2/:id`) now send the
-  request to that path with the request's query string appended. Previously the
-  original request path was appended after it (`/v2/5/legacy/5`) and the query
-  string was captured inside the params.
-- `staticRules[].disable` is honored — disabled static rules used to keep
-  serving files.
-- Static rule `path` prefixes match on whole path segments: `/assets` no longer
-  captures `/assets-old/...` or `/assetsfile.js`.
-- `--port`/`--target` CLI overrides are re-applied on config hot-reload instead
-  of being silently replaced by the file's values after the first save.
-- An error thrown by a later middleware (e.g. while starting the proxy request)
-  no longer escapes as an unhandled promise rejection — which crashes Node by
-  default — leaving the client hanging; the request now gets a 502. The
-  pipeline awaits `next()`'s promise even when a middleware doesn't return it.
-- WebSocket upgrades: a target that throws synchronously (e.g. not a valid URL)
-  no longer crashes the process; on an upstream error the client socket is
-  destroyed instead of being left half-open; errors are logged as errors
-  (were logged as info).
-- Rewrite scripts: a string return value is sent as UTF-8 with a correct
-  byte-based `content-length` (non-ASCII text used to get a too-short length);
-  objects are JSON-serialized; returning nothing keeps the original body (with
-  a warning) instead of sending an empty body; a script that doesn't export a
-  function is reported as an error instead of being silently skipped.
-- `bin/yxorp.js` only reports "Yxorp is not built" when `dist/index.js` is
-  actually missing — a missing dependency inside the app used to be reported
-  the same way.
-
-### Added
 - **CORS** (`"cors": true` or `{ origin, credentials, maxAge, exposeHeaders }`):
   preflights are answered locally and CORS headers are added to every
   response, replacing the target's own.
@@ -119,9 +88,12 @@ config schema, CLI flags, or mock/rewrite script API.
   startup and on reload.
 
 ### Changed
-- **Node.js 20.19+ or 22.12+ is required** (was >= 20). The `httpxy`
-  dependency is ESM-only and is loaded with `require()`, which only works
-  unflagged from those versions — on Node 20.0–20.18 Yxorp failed at startup.
+- The package's `main` is now the library entry and has no side effects;
+  the CLI moved to `dist/cli.js` (the `yxorp` command is unchanged).
+- Relative paths in the config resolve against the config's directory
+  directly, rather than through `process.chdir()` (the CLI still changes
+  into the config directory for scripts that rely on it).
+- A config reload that changes nothing is skipped.
 - Replaced `winston` with a small built-in logger. Log lines keep the
   `level: message` format; warnings and errors now go to stderr, and colors are
   only used on a terminal (respecting `NO_COLOR`/`FORCE_COLOR`).
@@ -138,6 +110,37 @@ config schema, CLI flags, or mock/rewrite script API.
   path-to-regexp patterns, since they're plain prefixes.
 - Compiled path-to-regexp matchers are cached per pattern instead of being
   recompiled for every rule on every request.
+
+### Fixed
+- Mock, rewrite, and remote rules now match the URL path only, so a request
+  with a query string (`/api/users?page=2`) no longer misses its rule, and the
+  query string no longer leaks into path params.
+- Remote rules whose `target` has a path (`http://host/v2/:id`) now send the
+  request to that path with the request's query string appended. Previously the
+  original request path was appended after it (`/v2/5/legacy/5`) and the query
+  string was captured inside the params.
+- `staticRules[].disable` is honored — disabled static rules used to keep
+  serving files.
+- Static rule `path` prefixes match on whole path segments: `/assets` no longer
+  captures `/assets-old/...` or `/assetsfile.js`.
+- `--port`/`--target` CLI overrides are re-applied on config hot-reload instead
+  of being silently replaced by the file's values after the first save.
+- An error thrown by a later middleware (e.g. while starting the proxy request)
+  no longer escapes as an unhandled promise rejection — which crashes Node by
+  default — leaving the client hanging; the request now gets a 502. The
+  pipeline awaits `next()`'s promise even when a middleware doesn't return it.
+- WebSocket upgrades: a target that throws synchronously (e.g. not a valid URL)
+  no longer crashes the process; on an upstream error the client socket is
+  destroyed instead of being left half-open; errors are logged as errors
+  (were logged as info).
+- Rewrite scripts: a string return value is sent as UTF-8 with a correct
+  byte-based `content-length` (non-ASCII text used to get a too-short length);
+  objects are JSON-serialized; returning nothing keeps the original body (with
+  a warning) instead of sending an empty body; a script that doesn't export a
+  function is reported as an error instead of being silently skipped.
+- `bin/yxorp.js` only reports "Yxorp is not built" when the build output is
+  actually missing — a missing dependency inside the app used to be reported
+  the same way.
 
 ### Documentation
 - Fixed the remote-rule examples in the README: a pattern without a wildcard
